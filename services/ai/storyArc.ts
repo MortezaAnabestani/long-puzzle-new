@@ -5,9 +5,78 @@
  */
 
 import { GoogleGenAI, Type } from "@google/genai";
-import { NarrativeLens, StoryArc } from "../../types";
+import { NarrativeLens, StoryArc, MusicMood } from "../../types";
 
 const getAIInstance = () => new GoogleGenAI({ apiKey: process.env.API_KEY });
+
+/**
+ * 🆕 NEW: Smart MusicMood detection from topic
+ */
+export const detectMusicMoodFromTopic = (topic: string, narrativeLens: NarrativeLens): MusicMood => {
+  const topicLower = topic.toLowerCase();
+
+  // Priority 1: Keyword-based detection
+  if (topicLower.includes("mystery") || topicLower.includes("secret") || topicLower.includes("hidden")) {
+    return MusicMood.MYSTERIOUS;
+  }
+  if (topicLower.includes("dark") || topicLower.includes("nightmare") || topicLower.includes("horror")) {
+    return MusicMood.DARK;
+  }
+  if (topicLower.includes("epic") || topicLower.includes("battle") || topicLower.includes("war")) {
+    return MusicMood.EPIC;
+  }
+  if (topicLower.includes("calm") || topicLower.includes("peace") || topicLower.includes("meditation")) {
+    return MusicMood.CALM;
+  }
+  if (topicLower.includes("suspense") || topicLower.includes("thriller") || topicLower.includes("tension")) {
+    return MusicMood.SUSPENSE;
+  }
+  if (topicLower.includes("inspiring") || topicLower.includes("motivat") || topicLower.includes("uplift")) {
+    return MusicMood.INSPIRING;
+  }
+  if (topicLower.includes("adventure") || topicLower.includes("explor") || topicLower.includes("journey")) {
+    return MusicMood.ADVENTURE;
+  }
+  if (topicLower.includes("emotion") || topicLower.includes("touching") || topicLower.includes("heartfelt")) {
+    return MusicMood.EMOTIONAL;
+  }
+  if (topicLower.includes("nostalg") || topicLower.includes("memory") || topicLower.includes("vintage")) {
+    return MusicMood.NOSTALGIC;
+  }
+  if (
+    topicLower.includes("science") ||
+    topicLower.includes("technology") ||
+    topicLower.includes("research")
+  ) {
+    return MusicMood.SCIENTIFIC;
+  }
+  if (topicLower.includes("hope") || topicLower.includes("bright") || topicLower.includes("positive")) {
+    return MusicMood.UPLIFTING;
+  }
+
+  // Priority 2: NarrativeLens-based fallback
+  switch (narrativeLens) {
+    case NarrativeLens.HIDDEN_DISCOVERY:
+    case NarrativeLens.UNSOLVED_ENIGMA:
+      return MusicMood.MYSTERIOUS;
+
+    case NarrativeLens.WHY_MYSTERY:
+      return MusicMood.SUSPENSE;
+
+    case NarrativeLens.COMPARISON:
+    case NarrativeLens.COUNTDOWN:
+      return MusicMood.EPIC;
+
+    case NarrativeLens.TRANSFORMATION:
+      return MusicMood.INSPIRING;
+
+    case NarrativeLens.ORIGIN_STORY:
+      return MusicMood.NOSTALGIC;
+
+    default:
+      return MusicMood.NEUTRAL;
+  }
+};
 
 export const generateCoherentStoryArc = async (
   topic: string,

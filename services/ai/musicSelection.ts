@@ -11,27 +11,93 @@ import { SmartMusicTrack } from "../types/serviceTypes";
 const getAIInstance = () => new GoogleGenAI({ apiKey: process.env.API_KEY });
 
 export const SONIC_LIBRARY = [
-  { id: 'sc-1', title: 'Deep Ambient Mystery', url: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3', genre: 'Documentary' },
-  { id: 'sc-2', title: 'Cinematic History', url: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3', genre: 'Cinematic' },
-  { id: 'sc-3', title: 'Techno Discovery', url: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-8.mp3', genre: 'Electronic' },
-  { id: 'sc-4', title: 'Ancient Echoes', url: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-4.mp3', genre: 'Ambient' },
+  {
+    id: "sc-1",
+    title: "Deep Ambient Mystery",
+    url: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3",
+    genre: "Documentary",
+  },
+  {
+    id: "sc-2",
+    title: "Cinematic History",
+    url: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3",
+    genre: "Cinematic",
+  },
+  {
+    id: "sc-3",
+    title: "Techno Discovery",
+    url: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-8.mp3",
+    genre: "Electronic",
+  },
+  {
+    id: "sc-4",
+    title: "Ancient Echoes",
+    url: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-4.mp3",
+    genre: "Ambient",
+  },
 ];
 
-export const findSmartMusicByMood = async (musicMood: MusicMood, topic: string): Promise<SmartMusicTrack | null> => {
+/**
+ * 🆕 Maps MusicMood to backend database folder names
+ */
+export const MOOD_TO_FOLDER_MAP: Record<MusicMood, string> = {
+  [MusicMood.CALM]: "calm",
+  [MusicMood.DARK]: "dark",
+  [MusicMood.EPIC]: "epic",
+  [MusicMood.INSPIRING]: "inspiring",
+  [MusicMood.MYSTERIOUS]: "mysterious",
+  [MusicMood.SUSPENSE]: "suspense",
+  [MusicMood.UPLIFTING]: "uplifting",
+  [MusicMood.EMOTIONAL]: "emotional",
+  [MusicMood.SCIENTIFIC]: "scientific",
+  [MusicMood.ADVENTURE]: "adventure",
+  [MusicMood.NOSTALGIC]: "nostalgic",
+  [MusicMood.NEUTRAL]: "neutral",
+};
+
+/**
+ * 🆕 Get database folder name from MusicMood
+ */
+export const getFolderFromMood = (mood: MusicMood): string => {
+  return MOOD_TO_FOLDER_MAP[mood] || "calm";
+};
+
+export const findSmartMusicByMood = async (
+  musicMood: MusicMood,
+  topic: string
+): Promise<SmartMusicTrack | null> => {
   const ai = getAIInstance();
 
   const moodGuidance = {
-    [MusicMood.MYSTERIOUS]: "Gentle mysterious ambience with soft pads, light tension, relaxing tempo (60-80 BPM), soothing but intriguing, good for puzzle solving and focus",
-    [MusicMood.EPIC]: "Uplifting cinematic music, inspiring orchestral, positive energy, medium tempo (85-100 BPM), motivating but not overwhelming, suitable for achievements",
-    [MusicMood.CALM]: "Very peaceful and relaxing, gentle piano or ambient pads, soft nature sounds, slow comfortable tempo (50-70 BPM), meditation-like, perfect for concentration",
-    [MusicMood.SUSPENSE]: "Light suspenseful background, subtle tension without being heavy, flowing rhythm (70-85 BPM), creates curiosity not anxiety, engaging for puzzle discovery",
-    [MusicMood.INSPIRING]: "Warm uplifting melody, hopeful and positive, gentle progression, comfortable tempo (75-95 BPM), encourages focus and accomplishment, bright but relaxing",
-    [MusicMood.DARK]: "Deep atmospheric ambience, rich bass but not aggressive, slow hypnotic tempo (55-75 BPM), mysterious depth without heaviness, contemplative mood"
+    [MusicMood.MYSTERIOUS]:
+      "Gentle mysterious ambience with soft pads, light tension, relaxing tempo (60-80 BPM), soothing but intriguing, good for puzzle solving and focus",
+    [MusicMood.EPIC]:
+      "Uplifting cinematic music, inspiring orchestral, positive energy, medium tempo (85-100 BPM), motivating but not overwhelming, suitable for achievements",
+    [MusicMood.CALM]:
+      "Very peaceful and relaxing, gentle piano or ambient pads, soft nature sounds, slow comfortable tempo (50-70 BPM), meditation-like, perfect for concentration",
+    [MusicMood.SUSPENSE]:
+      "Light suspenseful background, subtle tension without being heavy, flowing rhythm (70-85 BPM), creates curiosity not anxiety, engaging for puzzle discovery",
+    [MusicMood.INSPIRING]:
+      "Warm uplifting melody, hopeful and positive, gentle progression, comfortable tempo (75-95 BPM), encourages focus and accomplishment, bright but relaxing",
+    [MusicMood.DARK]:
+      "Deep atmospheric ambience, rich bass but not aggressive, slow hypnotic tempo (55-75 BPM), mysterious depth without heaviness, contemplative mood",
+    [MusicMood.UPLIFTING]:
+      "Hopeful and bright melodies, positive energy without being intense, comfortable tempo (80-100 BPM), encouraging and motivational, warm atmosphere",
+    [MusicMood.EMOTIONAL]:
+      "Touching and heartfelt, gentle emotional progression, slow to medium tempo (60-80 BPM), human connection feel, reflective and warm",
+    [MusicMood.SCIENTIFIC]:
+      "Clean modern ambient, intelligent sound design, steady rhythm (70-90 BPM), documentary quality, focus-enhancing without distraction",
+    [MusicMood.ADVENTURE]:
+      "Exploratory and curious, sense of discovery, medium tempo (75-95 BPM), exciting but not overwhelming, journey-like progression",
+    [MusicMood.NOSTALGIC]:
+      "Warm vintage feel, memory-evoking melodies, slow comfortable tempo (55-75 BPM), sentimental without being sad, reflective atmosphere",
+    [MusicMood.NEUTRAL]:
+      "Balanced background ambience, non-intrusive, medium tempo (65-85 BPM), suitable for any topic, professional and clean",
   };
 
   try {
     const response = await ai.models.generateContent({
-      model: 'gemini-3-pro-preview',
+      model: "gemini-3-pro-preview",
       contents: `Find a 100% ROYALTY-FREE (YouTube Safe) direct MP3 download link for PUZZLE-SOLVING background music.
 
       CORE CONTEXT: This music is for a PUZZLE VIDEO where pieces come together calmly and satisfyingly.
@@ -67,22 +133,22 @@ export const findSmartMusicByMood = async (musicMood: MusicMood, topic: string):
       Return JSON ONLY:
       { "title": "Track Title", "url": "https://...direct-link.mp3", "source": "Pixabay/Incompetech" }`,
       config: {
-        tools: [{ googleSearch: {}}],
+        tools: [{ googleSearch: {} }],
         responseMimeType: "application/json",
         responseSchema: {
           type: Type.OBJECT,
           properties: {
             title: { type: Type.STRING },
             url: { type: Type.STRING },
-            source: { type: Type.STRING }
+            source: { type: Type.STRING },
           },
-          required: ["title", "url", "source"]
-        }
-      }
+          required: ["title", "url", "source"],
+        },
+      },
     });
 
     const track = JSON.parse(response.text || "null");
-    if (track && track.url && (track.url.includes('pixabay') || track.url.includes('incompetech'))) {
+    if (track && track.url && (track.url.includes("pixabay") || track.url.includes("incompetech"))) {
       return track;
     }
     return null;

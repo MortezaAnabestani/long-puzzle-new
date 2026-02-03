@@ -8,6 +8,8 @@ import {
   UserPreferences,
   TopicType,
   StoryArc,
+  MusicMood, // 🆕 NEW
+  MusicSelectionMode, // 🆕 NEW
 } from "../types";
 import {
   generateArtImage,
@@ -24,6 +26,7 @@ import { VIRAL_CATEGORIES } from "../components/sidebar/VisionInput";
 import { selectFreshCategory, addTopicVariation } from "../utils/contentVariety";
 import { contentApi, ContentPayload } from "../services/api/contentApi";
 import { sonicEngine } from "../services/proceduralAudio";
+import { getFolderFromMood } from "@/services/ai/musicSelection";
 
 export type PipelineStep =
   | "IDLE"
@@ -78,18 +81,15 @@ const randomizeVisualParameters = () => {
 interface SmartMusicSelectionParams {
   musicTracks: MusicTrack[];
   queueIndex: number;
-  musicMood: any;
+  musicMood: MusicMood; // 🆕 CHANGED: any → MusicMood
   topic: string;
-  fetchAudioBlob: (url: string) => Promise<string | null>;
+  musicSelectionMode: MusicSelectionMode; // 🆕 NEW
+  fetchAudioBlob: (url: string) => Promise<{ url: string; blob: Blob } | null>;
   onAddCloudTrack: (url: string, title: string, source?: "backend" | "ai") => void;
   setActiveTrackName: (name: string | null) => void;
   audioRef: React.RefObject<HTMLAudioElement | null>;
 }
 
-/**
- * موسیقی را دیکد کرده در musicBufferRef ذخیره می‌کند.
- * اگر blob داده شود همان استفاده می‌شود (بدون fetch مجدد) تا در محیط‌هایی مثل AI Studio خطای دیکد ندهد.
- */
 const decodeAndStoreMusicBuffer = async (
   audioRef: React.RefObject<HTMLAudioElement | null>,
   musicBufferRef: React.MutableRefObject<AudioBuffer | null>,
@@ -151,67 +151,110 @@ const selectSmartMusic = async (
     queueIndex,
     musicMood,
     topic,
+    musicSelectionMode, // 🆕 NEW
     fetchAudioBlob,
     onAddCloudTrack,
     setActiveTrackName,
     audioRef,
   } = params;
 
-  // Priority 1: Manual tracks only (filter out backend/ai tracks)
+  // Priority 1: Manual tracks
   const manualTracks = musicTracks.filter((track) => track.source === "manual");
   if (manualTracks.length > 0) {
     const selectedTrack = manualTracks[queueIndex % manualTracks.length];
-    console.log(
-      `🎵 [MUSIC] Source: Manual (${(queueIndex % manualTracks.length) + 1}/${manualTracks.length}), Track: ${
-        selectedTrack.name
-      }`
-    );
+    console.log(`🎵 [MUSIC] Source: Manual, Track: ${selectedTrack.name}`);
 
-    // Load music to audioRef
     if (audioRef.current) {
-      console.log(`   🔊 Loading manual track to audio player...`);
-      console.log(`      Track URL: ${selectedTrack.url.substring(0, 80)}...`);
       audioRef.current.src = selectedTrack.url;
       audioRef.current.load();
-      console.log(`      Audio element readyState: ${audioRef.current.readyState}`);
-      console.log(`   ✅ Music loaded to audio player`);
-    } else {
-      console.error(`   ❌ audioRef.current is null!`);
     }
 
     setActiveTrackName(selectedTrack.name);
     return { source: "Manual Upload", title: selectedTrack.name };
   }
 
-  // Priority 2 & 3: Backend (در smartFetcher مدیریت می‌شود) یا AI
-  console.log(`🎵 [MUSIC] No manual tracks, using smartFetcher...`);
-  const { smartFetcher } = await import("../services/smartFetcher");
-  const trackData = await smartFetcher.fetchMusic(musicMood, topic);
+  // 🆕 NEW: Decision based on mode
+  const useDatabase = musicSelectionMode === MusicSelectionMode.DATABASE;
+  console.log(`🎵 [MUSIC] Mode: ${musicSelectionMode}, Mood: ${musicMood}`);
 
+  let trackData: any = null;
+
+  if (useDatabase) {
+    // 🆕 DATABASE MODE
+    console.log(`📁 [MUSIC] DATABASE mode`);
+    const { assetApi } = await import("../services/api/assetApi");
+    const folderName = getFolderFromMood(musicMood);
+    console.log(`   Folder: ${folderName}`);
+
+    try {
+      const backendUrl = await assetApi.getRandomMusicByMood(folderName);
+      if (backendUrl) {
+        trackData = {
+          title: `${musicMood} (Database)`,
+          url: backendUrl,
+          source: "Backend Database",
+        };
+      }
+    } catch (error) {
+      console.error(`   Backend failed:`, error);
+    }
+
+    // Fallback to calm
+    if (!trackData) {
+      try {
+        const fallbackUrl = await assetApi.getRandomMusicByMood("calm");
+        if (fallbackUrl) {
+          trackData = {
+            title: "Calm (Fallback)",
+            url: fallbackUrl,
+            source: "Backend Database",
+          };
+        }
+      } catch (e) {
+        console.error(`   Fallback failed:`, e);
+      }
+    }
+  } else {
+    // 🆕 AI SEARCH MODE
+    console.log(`🤖 [MUSIC] AI_SEARCH mode`);
+
+    try {
+      trackData = await findSmartMusicByMood(musicMood, topic);
+
+      if (!trackData || !trackData.url) {
+        trackData = await findSmartMusicByMood(musicMood, "Background Music");
+      }
+
+      if (!trackData || !trackData.url) {
+        trackData = await findSmartMusicByMood(MusicMood.CALM, "Ambient Calm");
+      }
+    } catch (error) {
+      console.error(`   AI search failed:`, error);
+    }
+  }
+
+  // Process found track
   if (trackData && trackData.url) {
     const result = await fetchAudioBlob(trackData.url);
+
     if (result) {
       const { url: blobUrl, blob } = result;
       const sourceType = trackData.source === "Backend Database" ? "backend" : "ai";
+
       onAddCloudTrack(blobUrl, trackData.title, sourceType);
       setActiveTrackName(trackData.title);
 
       if (audioRef.current) {
-        console.log(`   🔊 Loading cloud track to audio player...`);
-        console.log(`      Track source: ${trackData.source}, blob size: ${(blob.size / 1024).toFixed(1)}KB`);
         audioRef.current.src = blobUrl;
         audioRef.current.load();
-        console.log(`   ✅ Music loaded to audio player`);
-      } else {
-        console.error(`   ❌ audioRef.current is null!`);
       }
 
-      console.log(`🎵 [MUSIC] Source: ${trackData.source}, Track: ${trackData.title}`);
+      console.log(`🎵 SUCCESS! Mode: ${musicSelectionMode}, Track: ${trackData.title}`);
       return { source: trackData.source, title: trackData.title, blob };
     }
   }
 
-  console.warn(`⚠️ [MUSIC] No music found`);
+  console.warn(`⚠️ [MUSIC] No music found (mode: ${musicSelectionMode})`);
   return null;
 };
 
@@ -701,6 +744,7 @@ export const useProductionPipeline = (
               queueIndex: state.currentQueueIdx,
               musicMood: contentPackage.theme.musicMood,
               topic: sourceSubject,
+              musicSelectionMode: preferences.musicSelectionMode || MusicSelectionMode.DATABASE, // 🆕 NEW
               fetchAudioBlob,
               onAddCloudTrack,
               setActiveTrackName,
@@ -839,6 +883,7 @@ export const useProductionPipeline = (
               queueIndex,
               musicMood: contentPackage.theme.musicMood,
               topic: sourceSubject,
+              musicSelectionMode: preferences.musicSelectionMode || MusicSelectionMode.DATABASE, // 🆕 NEW
               fetchAudioBlob,
               onAddCloudTrack,
               setActiveTrackName,
@@ -1049,6 +1094,7 @@ export const useProductionPipeline = (
               queueIndex,
               musicMood: contentPackage.theme.musicMood,
               topic: sourceSubject,
+              musicSelectionMode: preferences.musicSelectionMode || MusicSelectionMode.DATABASE, // 🆕 NEW
               fetchAudioBlob,
               onAddCloudTrack,
               setActiveTrackName,
@@ -1248,6 +1294,7 @@ export const useProductionPipeline = (
     }
   }, [state.isAutoMode, state.pipelineStep, state.currentQueueIdx, processPipelineItem]);
 
+  // ✅ CRITICAL FIX: این return statement نبود!
   return {
     state,
     setState,

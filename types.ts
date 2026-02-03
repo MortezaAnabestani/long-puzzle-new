@@ -1,75 +1,87 @@
-
 export enum ArtStyle {
-  MANDALA = 'Detailed Mandala',
-  STAINED_GLASS = 'Stained Glass Art',
-  CYBERPUNK = 'Cyberpunk Illustration',
-  WATERCOLOR = 'Professional Watercolor',
-  ANIME = 'High-End Anime Scene',
-  OIL_PAINTING = 'Classical Oil Painting',
-  VECTOR_ART = 'Clean Vector Art',
-  HYPER_REALISTIC = 'Hyper-Realistic Photo'
+  MANDALA = "Detailed Mandala",
+  STAINED_GLASS = "Stained Glass Art",
+  CYBERPUNK = "Cyberpunk Illustration",
+  WATERCOLOR = "Professional Watercolor",
+  ANIME = "High-End Anime Scene",
+  OIL_PAINTING = "Classical Oil Painting",
+  VECTOR_ART = "Clean Vector Art",
+  HYPER_REALISTIC = "Hyper-Realistic Photo",
 }
 
 export enum PieceShape {
-  SQUARE = 'Square',
-  TRIANGLE = 'Triangle',
-  HEXAGON = 'Hexagon',
-  DIAMOND = 'Diamond',
-  BRICK = 'Brick/Rectangle',
-  CHEVRON = 'Chevron',
-  JIGSAW = 'True Interlocking'
+  SQUARE = "Square",
+  TRIANGLE = "Triangle",
+  HEXAGON = "Hexagon",
+  DIAMOND = "Diamond",
+  BRICK = "Brick/Rectangle",
+  CHEVRON = "Chevron",
+  JIGSAW = "True Interlocking",
 }
 
 export enum PieceMaterial {
-  CARDBOARD = 'Classic Cardboard',
-  WOOD = 'Polished Oak',
-  GLASS = 'Frosted Glass',
-  CARBON = 'Carbon Fiber'
+  CARDBOARD = "Classic Cardboard",
+  WOOD = "Polished Oak",
+  GLASS = "Frosted Glass",
+  CARBON = "Carbon Fiber",
 }
 
 export enum MovementType {
-  STANDARD = 'Realistic',
-  FLIGHT = 'Flight (Swoop)',
-  WAVE = 'Ocean Wave',
-  PLAYFUL = 'Bouncy Playful',
-  VORTEX = 'Spiral Vortex',
-  ELASTIC = 'Elastic Pop'
+  STANDARD = "Realistic",
+  FLIGHT = "Flight (Swoop)",
+  WAVE = "Ocean Wave",
+  PLAYFUL = "Bouncy Playful",
+  VORTEX = "Spiral Vortex",
+  ELASTIC = "Elastic Pop",
 }
 
 export enum PuzzleBackground {
-  FROSTED_DISCOVERY = 'Frosted Discovery'
+  FROSTED_DISCOVERY = "Frosted Discovery",
 }
 
 export enum TopicType {
-  BREAKING = 'Breaking Signal',
-  VIRAL = 'Viral Trend',
-  MANUAL = 'Custom Entry',
-  NARRATIVE = 'Historical Discovery'
+  BREAKING = "Breaking Signal",
+  VIRAL = "Viral Trend",
+  MANUAL = "Custom Entry",
+  NARRATIVE = "Historical Discovery",
 }
 
 export enum StorySource {
-  AI_DISCOVERY = 'AI_DISCOVERY',
-  TOPIC_GUIDE = 'TOPIC_GUIDE',
-  DIRECT_PROMPT = 'DIRECT_PROMPT'
+  AI_DISCOVERY = "AI_DISCOVERY",
+  TOPIC_GUIDE = "TOPIC_GUIDE",
+  DIRECT_PROMPT = "DIRECT_PROMPT",
 }
 
 export enum NarrativeLens {
-  HIDDEN_DISCOVERY = 'Hidden Discovery',
-  WHY_MYSTERY = 'Why Mystery',
-  COMPARISON = 'Comparison Reveal',
-  UNSOLVED_ENIGMA = 'Unsolved Enigma',
-  TRANSFORMATION = 'Before/After Transformation',
-  COUNTDOWN = 'Top N Countdown',
-  ORIGIN_STORY = 'Origin Story'
+  HIDDEN_DISCOVERY = "Hidden Discovery",
+  WHY_MYSTERY = "Why Mystery",
+  COMPARISON = "Comparison Reveal",
+  UNSOLVED_ENIGMA = "Unsolved Enigma",
+  TRANSFORMATION = "Before/After Transformation",
+  COUNTDOWN = "Top N Countdown",
+  ORIGIN_STORY = "Origin Story",
 }
 
 export enum MusicMood {
-  MYSTERIOUS = 'Mysterious Ambient',
-  EPIC = 'Epic Cinematic',
-  CALM = 'Calm Atmospheric',
-  SUSPENSE = 'Suspenseful Tension',
-  INSPIRING = 'Inspiring Uplifting',
-  DARK = 'Dark Intense'
+  MYSTERIOUS = "Mysterious Ambient",
+  EPIC = "Epic Cinematic",
+  CALM = "Calm Atmospheric",
+  SUSPENSE = "Suspenseful Tension",
+  INSPIRING = "Inspiring Uplifting",
+  DARK = "Dark Intense",
+  // 🆕 NEW: Extended moods for comprehensive coverage
+  UPLIFTING = "Uplifting Hopeful",
+  EMOTIONAL = "Emotional Touching",
+  SCIENTIFIC = "Scientific Documentary",
+  ADVENTURE = "Adventure Exploration",
+  NOSTALGIC = "Nostalgic Memory",
+  NEUTRAL = "Neutral Background",
+}
+
+// 🆕 NEW: Music selection mode
+export enum MusicSelectionMode {
+  AI_SEARCH = "AI_SEARCH", // Use AI to find music online
+  DATABASE = "DATABASE", // Use local database music
 }
 
 export interface StoryArc {
@@ -89,8 +101,8 @@ export interface ContentTheme {
 }
 
 export enum BackendMode {
-  JSON = 'json',
-  ALL = 'all'
+  JSON = "json",
+  ALL = "all",
 }
 
 export interface PuzzleState {
@@ -115,4 +127,5 @@ export interface UserPreferences {
   topicCategory?: string;
   showDocumentaryTips?: boolean;
   narrativeLens?: NarrativeLens;
+  musicSelectionMode?: MusicSelectionMode; // 🆕 NEW
 }

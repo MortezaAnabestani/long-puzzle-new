@@ -1,4 +1,3 @@
-
 import React, { useState, useRef, useEffect } from "react";
 import {
   Search,
@@ -15,10 +14,12 @@ import {
   Radio,
   SkipForward,
   Server,
+  Database,
 } from "lucide-react";
 import { findSmartMusicByMood, SmartMusicTrack, SONIC_LIBRARY } from "../../services/geminiService";
 import { assetApi } from "../../services/api/assetApi";
-import { MusicMood } from "../../types";
+import { MusicMood, MusicSelectionMode } from "../../types";
+import { getFolderFromMood } from "@/services/ai/musicSelection";
 
 /**
  * 🛠 تنظیمات پروکسی اختصاصی Cloudflare
@@ -27,6 +28,8 @@ const CLOUDFLARE_WORKER_URL: string = "https://plain-tooth-75c3.jujube-bros.work
 
 interface SmartMusicFinderProps {
   currentSubject: string;
+  musicMood: MusicMood; // 🆕 NEW: Added musicMood prop
+  musicSelectionMode: MusicSelectionMode; // 🆕 NEW: Added mode prop
   onSelectTrack: (url: string, title: string) => void;
   disabled?: boolean;
 }
@@ -34,13 +37,21 @@ interface SmartMusicFinderProps {
 type SearchState = "IDLE" | "SEARCHING" | "DOWNLOADING" | "READY" | "ERROR";
 type SourceType = "BACKEND" | "AI_SEARCH" | "FALLBACK";
 
-const SmartMusicFinder: React.FC<SmartMusicFinderProps> = ({ currentSubject, onSelectTrack, disabled }) => {
+const SmartMusicFinder: React.FC<SmartMusicFinderProps> = ({
+  currentSubject,
+  musicMood,
+  musicSelectionMode,
+  onSelectTrack,
+  disabled,
+}) => {
   const [state, setState] = useState<SearchState>("IDLE");
   const [statusMsg, setStatusMsg] = useState("");
   const [track, setTrack] = useState<SmartMusicTrack | null>(null);
   const [localUrl, setLocalUrl] = useState<string | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
-  const [proxyType, setProxyType] = useState<"CF_WORKER" | "PUBLIC_CORS" | "INTERNAL" | "BACKEND">("INTERNAL");
+  const [proxyType, setProxyType] = useState<"CF_WORKER" | "PUBLIC_CORS" | "INTERNAL" | "BACKEND">(
+    "INTERNAL"
+  );
   const [sourceType, setSourceType] = useState<SourceType>("BACKEND");
   const audioPreviewRef = useRef<HTMLAudioElement | null>(null);
 
@@ -113,76 +124,83 @@ const SmartMusicFinder: React.FC<SmartMusicFinderProps> = ({ currentSubject, onS
       let target: SmartMusicTrack | null = null;
       let blobUrl: string | null = null;
 
-      // 🥇 Tier 1: Try Backend First (unless explicitly skipped)
-      if (!forceSafe && !skipBackend) {
-        setStatusMsg("Loading from Backend...");
+      // 🆕 DECISION LOGIC: Check musicSelectionMode
+      const useDatabase = musicSelectionMode === MusicSelectionMode.DATABASE;
+
+      // 🥇 Tier 1: Try Backend Database (if mode is DATABASE)
+      if (useDatabase && !forceSafe && !skipBackend) {
+        setStatusMsg("Loading from Database...");
         setProxyType("BACKEND");
         setSourceType("BACKEND");
-        console.log(`🎵 [SmartMusic] Trying backend first...`);
+
+        const folderName = getFolderFromMood(musicMood);
+        console.log(`🎵 [SmartMusic] Database mode - Loading from folder: ${folderName}`);
 
         try {
-          const backendUrl = await assetApi.getRandomMusicByMood("calm");
+          const backendUrl = await assetApi.getRandomMusicByMood(folderName);
           if (backendUrl) {
-            target = { title: "Backend Music", url: backendUrl, source: "Backend" };
+            target = { title: `${musicMood} Track`, url: backendUrl, source: "Database" };
             setTrack(target);
             setState("DOWNLOADING");
-            setStatusMsg("Downloading from Backend...");
+            setStatusMsg("Downloading from Database...");
 
             // Direct fetch (no proxy needed for backend)
             const response = await fetch(backendUrl, {
-              headers: { 'ngrok-skip-browser-warning': 'true' }
+              headers: { "ngrok-skip-browser-warning": "true" },
             });
             if (response.ok) {
               const blob = await response.blob();
               blobUrl = URL.createObjectURL(blob);
 
               if (blobUrl) {
-                console.log(`✅ [SmartMusic] Loaded from backend successfully`);
+                console.log(`✅ [SmartMusic] Loaded from database folder: ${folderName}`);
                 setLocalUrl(blobUrl);
                 setState("READY");
-                setStatusMsg("Backend Music Ready");
+                setStatusMsg(`Database Music Ready (${folderName})`);
                 onSelectTrack(blobUrl, target.title);
                 return; // Success! Exit here
               }
             }
           }
         } catch (error) {
-          console.warn(`⚠️ [SmartMusic] Backend failed, falling back to AI search...`, error);
+          console.warn(`⚠️ [SmartMusic] Database failed, falling back...`, error);
         }
       }
 
-      // 🥈 Tier 2: AI Search (if backend failed or forceSafe)
-      if (forceSafe) {
-        setSourceType("FALLBACK");
-        const random = SONIC_LIBRARY[Math.floor(Math.random() * SONIC_LIBRARY.length)];
-        target = { title: random.title, url: random.url, source: "Internal" };
-        setProxyType("INTERNAL");
-        setStatusMsg("Mounting Calm Asset...");
-      } else {
-        setSourceType("AI_SEARCH");
-        setStatusMsg("Finding Slow/Medium Rhythm...");
-        console.log(`🔍 [SmartMusic] Trying AI search...`);
-        target = await findSmartMusicByMood(MusicMood.MYSTERIOUS, currentSubject);
-      }
-
-      if (target && target.url) {
-        setTrack(target);
-        setState("DOWNLOADING");
-
-        blobUrl = await fetchAudioBlob(target.url);
-
-        if (blobUrl) {
-          console.log(`✅ [SmartMusic] Loaded from ${forceSafe ? 'fallback' : 'AI search'}`);
-          setLocalUrl(blobUrl);
-          setState("READY");
-          setStatusMsg("Ambient Ready");
-          onSelectTrack(blobUrl, target.title);
+      // 🥈 Tier 2: AI Search (if mode is AI_SEARCH or database failed)
+      if (!useDatabase || forceSafe) {
+        if (forceSafe) {
+          setSourceType("FALLBACK");
+          const random = SONIC_LIBRARY[Math.floor(Math.random() * SONIC_LIBRARY.length)];
+          target = { title: random.title, url: random.url, source: "Internal" };
+          setProxyType("INTERNAL");
+          setStatusMsg("Mounting Calm Asset...");
         } else {
-          if (!forceSafe) handleSearch(true);
-          else setState("ERROR");
+          setSourceType("AI_SEARCH");
+          setStatusMsg("Finding Slow/Medium Rhythm...");
+          console.log(`🔍 [SmartMusic] AI mode - Searching for: ${musicMood}`);
+          target = await findSmartMusicByMood(musicMood, currentSubject);
         }
-      } else {
-        handleSearch(true);
+
+        if (target && target.url) {
+          setTrack(target);
+          setState("DOWNLOADING");
+
+          blobUrl = await fetchAudioBlob(target.url);
+
+          if (blobUrl) {
+            console.log(`✅ [SmartMusic] Loaded from ${forceSafe ? "fallback" : "AI search"}`);
+            setLocalUrl(blobUrl);
+            setState("READY");
+            setStatusMsg("Ambient Ready");
+            onSelectTrack(blobUrl, target.title);
+          } else {
+            if (!forceSafe) handleSearch(true);
+            else setState("ERROR");
+          }
+        } else {
+          handleSearch(true);
+        }
       }
     } catch (e) {
       console.error("Critical Failure in Sonic Bridge:", e);
@@ -203,6 +221,8 @@ const SmartMusicFinder: React.FC<SmartMusicFinderProps> = ({ currentSubject, onS
     }
   };
 
+  const isAiMode = musicSelectionMode === MusicSelectionMode.AI_SEARCH;
+
   return (
     <div className="w-full bg-indigo-950/20 border border-indigo-500/30 rounded-2xl p-4 space-y-3 shadow-xl">
       <audio
@@ -214,12 +234,22 @@ const SmartMusicFinder: React.FC<SmartMusicFinderProps> = ({ currentSubject, onS
 
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2 text-indigo-400">
-          <Server
-            className={`w-3.5 h-3.5 ${
-              state === "SEARCHING" || state === "DOWNLOADING" ? "animate-pulse" : ""
-            }`}
-          />
-          <span className="text-[10px] font-black uppercase tracking-widest">Puzzle Rhythm Analyzer</span>
+          {isAiMode ? (
+            <Server
+              className={`w-3.5 h-3.5 ${
+                state === "SEARCHING" || state === "DOWNLOADING" ? "animate-pulse" : ""
+              }`}
+            />
+          ) : (
+            <Database
+              className={`w-3.5 h-3.5 ${
+                state === "SEARCHING" || state === "DOWNLOADING" ? "animate-pulse" : ""
+              }`}
+            />
+          )}
+          <span className="text-[10px] font-black uppercase tracking-widest">
+            {isAiMode ? "AI Music Discovery" : `Database: ${getFolderFromMood(musicMood)}`}
+          </span>
         </div>
         <div
           className={`flex items-center gap-1.5 px-2 py-0.5 rounded text-[9px] font-mono font-bold border ${
@@ -233,12 +263,12 @@ const SmartMusicFinder: React.FC<SmartMusicFinderProps> = ({ currentSubject, onS
           }`}
         >
           {proxyType === "BACKEND"
-            ? "BACKEND_DIRECT"
+            ? "LOCAL_DB"
             : proxyType === "CF_WORKER"
-            ? "LOW_TEMPO"
+            ? "AI_SEARCH"
             : proxyType === "PUBLIC_CORS"
-            ? "CALM_GATEWAY"
-            : "SAFE_AMBIENT"}
+            ? "PROXY_FETCH"
+            : "FALLBACK"}
         </div>
       </div>
 
@@ -250,10 +280,12 @@ const SmartMusicFinder: React.FC<SmartMusicFinderProps> = ({ currentSubject, onS
         >
           {state === "SEARCHING" || state === "DOWNLOADING" ? (
             <Loader2 className="w-3.5 h-3.5 animate-spin" />
-          ) : (
+          ) : isAiMode ? (
             <Search className="w-3.5 h-3.5" />
+          ) : (
+            <Database className="w-3.5 h-3.5" />
           )}
-          Find Calm Music
+          {isAiMode ? "Find AI Music" : "Load from DB"}
         </button>
 
         <button
@@ -303,7 +335,8 @@ const SmartMusicFinder: React.FC<SmartMusicFinderProps> = ({ currentSubject, onS
                 {track.title}
               </span>
               <span className="text-[9px] text-emerald-500 font-mono flex items-center gap-1 mt-1">
-                <ShieldCheck className="w-3 h-3" /> BPM_TARGET: 60-90
+                <ShieldCheck className="w-3 h-3" />
+                {isAiMode ? "AI_DISCOVERED" : `DB_${getFolderFromMood(musicMood).toUpperCase()}`}
               </span>
             </div>
           </div>
@@ -317,4 +350,3 @@ const SmartMusicFinder: React.FC<SmartMusicFinderProps> = ({ currentSubject, onS
 };
 
 export default SmartMusicFinder;
-    
