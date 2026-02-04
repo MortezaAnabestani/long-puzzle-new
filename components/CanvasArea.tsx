@@ -1,8 +1,7 @@
-
-import React, { useRef } from 'react';
-import PuzzleCanvas, { CanvasHandle } from './PuzzleCanvas';
-import { PieceShape, PieceMaterial, MovementType, PuzzleBackground, StoryArc } from '../types';
-import { Maximize2, Smartphone, Monitor } from 'lucide-react';
+import React, { useRef } from "react";
+import PuzzleCanvas, { CanvasHandle } from "./PuzzleCanvas";
+import { PieceShape, PieceMaterial, MovementType, PuzzleBackground, StoryArc } from "../types";
+import { Maximize2, Smartphone, Monitor } from "lucide-react";
 
 interface CanvasAreaProps {
   canvasHandleRef: React.RefObject<CanvasHandle | null>;
@@ -24,18 +23,37 @@ interface CanvasAreaProps {
   storyArc?: StoryArc | null;
   showDocumentaryTips?: boolean;
   progress: number;
+  isLastChapter: boolean;
 }
 
 const CanvasArea: React.FC<CanvasAreaProps> = ({
-  canvasHandleRef, imageUrl, durationMinutes, isColoring, pieceCount, shape, material, movement, background, topicCategory, engagementGifUrl, channelLogoUrl, onProgress, onFinished, onToggleSolve,
-  docSnippets = [], storyArc = null, showDocumentaryTips = false, progress
+  canvasHandleRef,
+  imageUrl,
+  durationMinutes,
+  isColoring,
+  pieceCount,
+  shape,
+  material,
+  movement,
+  background,
+  topicCategory,
+  engagementGifUrl,
+  channelLogoUrl,
+  onProgress,
+  onFinished,
+  onToggleSolve,
+  docSnippets = [],
+  storyArc = null,
+  showDocumentaryTips = false,
+  progress,
+  isLastChapter,
 }) => {
   const phoneFrameRef = useRef<HTMLDivElement>(null);
 
   const handleFullscreen = () => {
     if (phoneFrameRef.current) {
       if (!document.fullscreenElement) {
-        phoneFrameRef.current.requestFullscreen().catch(err => {
+        phoneFrameRef.current.requestFullscreen().catch((err) => {
           console.error(`Error attempting to enable full-screen mode: ${err.message}`);
         });
       } else {
@@ -47,16 +65,17 @@ const CanvasArea: React.FC<CanvasAreaProps> = ({
   return (
     <div className="w-full h-full flex flex-col items-center justify-center bg-[#010103] overflow-hidden relative">
       <div className="absolute inset-0 pointer-events-none opacity-[0.03]">
-        <div className="absolute inset-0" 
-             style={{
-               backgroundImage: 'radial-gradient(circle at 2px 2px, #3b82f6 1px, transparent 0)',
-               backgroundSize: '40px 40px'
-             }}
+        <div
+          className="absolute inset-0"
+          style={{
+            backgroundImage: "radial-gradient(circle at 2px 2px, #3b82f6 1px, transparent 0)",
+            backgroundSize: "40px 40px",
+          }}
         />
       </div>
 
       <div className="relative h-[94%] flex items-center justify-center py-6 px-4">
-        <div 
+        <div
           ref={phoneFrameRef}
           className="phone-frame-container relative h-full aspect-[9/19.5] bg-[#050508] rounded-[3.8rem] p-3 shadow-[0_0_80px_rgba(0,0,0,0.9),0_0_0_4px_#1a1a1f] border border-white/10 flex flex-col group overflow-hidden"
         >
@@ -68,7 +87,7 @@ const CanvasArea: React.FC<CanvasAreaProps> = ({
           </div>
 
           <div className="absolute top-14 right-6 z-[60] flex flex-col gap-3 opacity-0 group-hover:opacity-100 transition-all duration-300">
-            <button 
+            <button
               onClick={handleFullscreen}
               className="w-12 h-12 rounded-2xl bg-black/60 backdrop-blur-xl border border-white/10 flex items-center justify-center text-white/50 hover:text-white hover:bg-blue-600 transition-all shadow-2xl"
               title="Fullscreen Monitor"
@@ -98,6 +117,7 @@ const CanvasArea: React.FC<CanvasAreaProps> = ({
                 docSnippets={docSnippets}
                 storyArc={storyArc}
                 showDocumentaryTips={showDocumentaryTips}
+                isLastChapter={isLastChapter}
               />
             ) : (
               <div className="absolute inset-0 flex flex-col items-center justify-center bg-[#050508]">
@@ -108,11 +128,13 @@ const CanvasArea: React.FC<CanvasAreaProps> = ({
                   </div>
                 </div>
                 <div className="flex flex-col items-center gap-2">
-                   <span className="text-[10px] font-black text-zinc-700 uppercase tracking-[0.5em]">Studio_Standby</span>
-                   <div className="flex items-center gap-2 px-3 py-1 bg-white/[0.03] rounded-full border border-white/5">
-                      <div className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse" />
-                      <span className="text-[8px] text-zinc-500 font-mono">LINK_READY</span>
-                   </div>
+                  <span className="text-[10px] font-black text-zinc-700 uppercase tracking-[0.5em]">
+                    Studio_Standby
+                  </span>
+                  <div className="flex items-center gap-2 px-3 py-1 bg-white/[0.03] rounded-full border border-white/5">
+                    <div className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse" />
+                    <span className="text-[8px] text-zinc-500 font-mono">LINK_READY</span>
+                  </div>
                 </div>
               </div>
             )}
