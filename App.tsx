@@ -111,6 +111,18 @@ const AppContent: React.FC = () => {
   const currentChapter = state.project?.chapters[state.currentChapterIndex] ?? null;
   const currentImageUrl = currentChapter?.imageUrl ?? null;
 
+  // ─── 🔥 PHASE 1: PRELOAD NEXT CHAPTER IMAGE ─────────────────────────
+  const nextChapter = state.project?.chapters[state.currentChapterIndex + 1] ?? null;
+  const nextImageUrl = nextChapter?.imageUrl ?? null;
+
+  useEffect(() => {
+    if (nextImageUrl) {
+      // Preload next chapter image in background
+      const preloadImg = new Image();
+      preloadImg.src = nextImageUrl;
+    }
+  }, [nextImageUrl]);
+
   // ─── CHAPTER ADVANCE ────────────────────────────────────────────────
   /**
    * یک فصل تموم شده.
@@ -377,8 +389,7 @@ const AppContent: React.FC = () => {
             onProgress={(p) => setState((prev) => ({ ...prev, progress: p }))}
             onFinished={handlePuzzleFinished}
             onToggleSolve={handleToggleSolve}
-            docSnippets={state.docSnippets}
-            storyArc={state.storyArc}
+            narrativeText={currentChapter?.narrativeText ?? ""}
             showDocumentaryTips={preferences.showDocumentaryTips}
             progress={state.progress}
             isLastChapter={

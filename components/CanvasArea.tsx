@@ -1,7 +1,7 @@
 import React, { useRef } from "react";
 import PuzzleCanvas, { CanvasHandle } from "./PuzzleCanvas";
-import { PieceShape, PieceMaterial, MovementType, PuzzleBackground, StoryArc } from "../types";
-import { Maximize2, Smartphone, Monitor } from "lucide-react";
+import { PieceShape, PieceMaterial, MovementType, PuzzleBackground } from "../types";
+import { Maximize2, Smartphone } from "lucide-react";
 
 interface CanvasAreaProps {
   canvasHandleRef: React.RefObject<CanvasHandle | null>;
@@ -19,8 +19,7 @@ interface CanvasAreaProps {
   onProgress: (p: number) => void;
   onFinished: () => void;
   onToggleSolve: () => void;
-  docSnippets?: string[];
-  storyArc?: StoryArc | null;
+  narrativeText: string; // 🔥 PHASE 1: هر فصل متن خودش
   showDocumentaryTips?: boolean;
   progress: number;
   isLastChapter: boolean;
@@ -42,8 +41,7 @@ const CanvasArea: React.FC<CanvasAreaProps> = ({
   onProgress,
   onFinished,
   onToggleSolve,
-  docSnippets = [],
-  storyArc = null,
+  narrativeText,
   showDocumentaryTips = false,
   progress,
   isLastChapter,
@@ -114,8 +112,7 @@ const CanvasArea: React.FC<CanvasAreaProps> = ({
                 isSolving={isColoring}
                 onFinished={onFinished}
                 onToggleSolve={onToggleSolve}
-                docSnippets={docSnippets}
-                storyArc={storyArc}
+                narrativeText={narrativeText}
                 showDocumentaryTips={showDocumentaryTips}
                 isLastChapter={isLastChapter}
               />

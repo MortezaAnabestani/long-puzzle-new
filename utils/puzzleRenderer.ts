@@ -1,9 +1,9 @@
 import { Piece } from "../hooks/usePuzzleLogic";
-import { PieceShape, MovementType, PuzzleBackground, StoryArc } from "../types";
+import { PieceShape, MovementType, PuzzleBackground } from "../types";
 import { getFinaleState, getDiagonalWaveY } from "./finaleManager";
 import { envEngine } from "./environmentRenderer";
 import { renderOutroCard } from "./outroRenderer";
-import { updateTrailHistory, renderTrailEffect, clearTrailForPiece } from "./trailEffects";
+import { updateTrailHistory, renderTrailEffect } from "./trailEffects";
 
 export interface RenderOptions {
   ctx: CanvasRenderingContext2D;
@@ -14,32 +14,44 @@ export interface RenderOptions {
   shape: PieceShape;
   movement: MovementType;
   background: PuzzleBackground;
-  isShorts: boolean;
   particles: any[];
   physicsPieces?: Map<number, { x: number; y: number; angle: number }>;
-  docSnippets?: string[];
-  storyArc?: StoryArc | null;
+  narrativeText?: string; // 🔥 PHASE 1: متن فصل فعلی
   channelLogo?: HTMLImageElement;
 }
 
-const wrapText = (ctx: CanvasRenderingContext2D, text: string, maxWidth: number) => {
+// ─── 🔥 PHASE 1: CACHED TEXT WRAPPING ─────────────────────────────────
+const textWrapCache = new Map<string, string[]>();
+
+const wrapText = (ctx: CanvasRenderingContext2D, text: string, maxWidth: number): string[] => {
+  const cacheKey = `${text}-${maxWidth}`;
+  if (textWrapCache.has(cacheKey)) {
+    return textWrapCache.get(cacheKey)!;
+  }
+
   const words = text.split(" ");
-  const lines = [];
+  const lines: string[] = [];
   let currentLine = words[0];
+
   for (let i = 1; i < words.length; i++) {
     const word = words[i];
-    const width = ctx.measureText(currentLine + " " + word).width;
+    const testLine = currentLine + " " + word;
+    const width = ctx.measureText(testLine).width;
+
     if (width < maxWidth) {
-      currentLine += " " + word;
+      currentLine = testLine;
     } else {
       lines.push(currentLine);
       currentLine = word;
     }
   }
   lines.push(currentLine);
+
+  textWrapCache.set(cacheKey, lines);
   return lines;
 };
 
+// ─── 🔥 PHASE 1: OPTIMIZED KINETIC TRANSFORM (inline για performance) ─
 const calculateKineticTransform = (
   p: Piece,
   t: number,
@@ -47,8 +59,10 @@ const calculateKineticTransform = (
   vWidth: number,
   vHeight: number
 ) => {
-  let x = p.cx + (p.tx + p.pw / 2 - p.cx) * t;
-  let y = p.cy + (p.ty + p.ph / 2 - p.cy) * t;
+  const baseX = p.cx + (p.tx + p.pw / 2 - p.cx) * t;
+  const baseY = p.cy + (p.ty + p.ph / 2 - p.cy) * t;
+  let x = baseX;
+  let y = baseY;
   let rot = p.rotation * (1 - t);
   let scale = 1.0;
 
@@ -95,6 +109,21 @@ const calculateKineticTransform = (
   return { x, y, rot, scale };
 };
 
+// ─── 🔥 PHASE 1: CACHED SORTED PIECES ─────────────────────────────────
+let lastSortedPieces: Piece[] = [];
+let lastSortKey = "";
+
+const getSortedPieces = (pieces: Piece[]): Piece[] => {
+  const currentKey = pieces.map((p) => `${p.id}-${p.zOrder}`).join(",");
+  if (currentKey === lastSortKey && lastSortedPieces.length === pieces.length) {
+    return lastSortedPieces;
+  }
+  lastSortedPieces = [...pieces].sort((a, b) => a.zOrder - b.zOrder);
+  lastSortKey = currentKey;
+  return lastSortedPieces;
+};
+
+// ─── 🔥 PHASE 1: MAIN RENDER FUNCTION (OPTIMIZED) ─────────────────────
 export const renderPuzzleFrame = ({
   ctx,
   img,
@@ -105,8 +134,7 @@ export const renderPuzzleFrame = ({
   movement,
   background,
   physicsPieces,
-  docSnippets = [],
-  storyArc,
+  narrativeText = "",
   channelLogo,
 }: RenderOptions): number => {
   const vWidth = 1080;
@@ -117,14 +145,14 @@ export const renderPuzzleFrame = ({
   const elapsedAfterFinish = Math.max(0, elapsed - totalDuration);
   const fState = getFinaleState(elapsedAfterFinish);
 
-  // --- 1. ENVIRONMENT ---
+  // ─── 1. ENVIRONMENT ───────────────────────────────────────────────
   if (!physicsPieces) {
     envEngine.render(ctx, img, elapsed, vWidth, vHeight);
   } else {
-    // فقط یک پس‌زمینه ساده رندر کن
     ctx.fillStyle = "#050505";
     ctx.fillRect(0, 0, vWidth, vHeight);
   }
+
   ctx.save();
   if (fState.isFinale) {
     ctx.translate(vWidth / 2, vHeight / 2);
@@ -137,14 +165,17 @@ export const renderPuzzleFrame = ({
   ctx.drawImage(img, 0, 0, vWidth, vHeight);
   ctx.globalAlpha = 1.0;
 
-  const sorted = [...pieces].sort((a, b) => a.zOrder - b.zOrder);
-  const completedPieces: any[] = [];
-  const movingPieces: any[] = [];
+  // ─── 🔥 PHASE 1: USE CACHED SORTED PIECES ─────────────────────────
+  const sorted = getSortedPieces(pieces);
+  const completedPieces: Piece[] = [];
+  const movingPieces: Piece[] = [];
 
+  // Pre-calculate tRaw for all pieces (avoid recalculation)
   for (const p of sorted) {
     const delay = (p.assemblyOrder / totalPieces) * (totalDuration - 2700);
     const tRaw = Math.max(0, Math.min((elapsed - delay) / 2700, 1));
     (p as any).tRaw = tRaw;
+
     if (physicsPieces?.has(p.id)) {
       movingPieces.push(p);
     } else if (tRaw >= 1) {
@@ -154,108 +185,101 @@ export const renderPuzzleFrame = ({
     }
   }
 
-  // --- 2. PIECES ---
+  // ─── 2. RENDER COMPLETED PIECES (BATCH) ───────────────────────────
   for (const p of completedPieces) {
-    // اگر فاز فینال نیست، محاسبات موج را کلاً نادیده بگیر
     const waveY = fState.waveActive ? getDiagonalWaveY(p, elapsedAfterFinish, vWidth, vHeight) : 0;
-
     const drawX = p.tx - (p.cachedCanvas!.width - p.pw) / 2;
     const drawY = p.ty - (p.cachedCanvas!.height - p.ph) / 2 + waveY;
-
-    // استفاده ازdrawImage ساده بدون تغییر وضعیت Context تا جای ممکن
     ctx.drawImage(p.cachedCanvas!, drawX, drawY);
   }
 
+  // ─── 3. RENDER MOVING PIECES (OPTIMIZED) ──────────────────────────
   for (const p of movingPieces) {
     const physicsData = physicsPieces?.get(p.id);
+
     if (physicsData) {
+      // Physics mode (fast path)
       ctx.save();
       ctx.translate(physicsData.x, physicsData.y);
       ctx.rotate(physicsData.angle);
-      ctx.shadowBlur = 0;
       ctx.drawImage(p.cachedCanvas!, -p.cachedCanvas!.width / 2, -p.cachedCanvas!.height / 2);
       ctx.restore();
       continue;
     }
+
     const tRaw = (p as any).tRaw;
     const pos = calculateKineticTransform(p, tRaw, movement, vWidth, vHeight);
 
-    // Optimized trail rendering - only during peak movement
+    // Trail rendering (only during peak movement)
     if (tRaw >= 0.1 && tRaw <= 0.85) {
-      // Update trail history for this piece
       updateTrailHistory(p, pos.x, pos.y, pos.rot, pos.scale, elapsed, movement, tRaw);
-
-      // Render trail effect first (behind the piece)
       renderTrailEffect(ctx, p, movement);
     }
 
-    // Render the main piece
+    // Render main piece
     ctx.save();
     ctx.translate(pos.x, pos.y);
     ctx.rotate(pos.rot);
     ctx.scale(pos.scale, pos.scale);
+
     if (!fState.isFinale) {
       ctx.shadowColor = "rgba(0,0,0,0.6)";
       ctx.shadowBlur = 20;
     }
+
     ctx.drawImage(p.cachedCanvas!, -p.cachedCanvas!.width / 2, -p.cachedCanvas!.height / 2);
     ctx.restore();
   }
+
   ctx.restore();
 
-  // --- 3. STORY ARC & DOCUMENTARY SNIPPETS ---
-  // Only show during assembly, before physics/outro takes over
-  if (!physicsPieces) {
+  // ─── 4. 🔥 PHASE 1: NARRATIVE TEXT OVERLAY (OPTIMIZED) ─────────────
+  if (!physicsPieces && narrativeText) {
     const progressPercent = (Math.min(elapsed, totalDuration) / totalDuration) * 100;
-    let text = "";
-    let label = "DID YOU KNOW?";
-    let labelColor = "rgba(70, 140, 255, 1)";
-    let borderColor = "rgba(70, 140, 255, 0.4)";
 
-    // Prioritize storyArc over docSnippets
-    if (storyArc) {
-      if (progressPercent >= 5 && progressPercent < 18) {
-        text = storyArc.hook;
-        label = "MYSTERY HOOK";
-        labelColor = "rgba(255, 220, 100, 1)";
-        borderColor = "rgba(255, 220, 100, 0.4)";
-      } else if (progressPercent >= 22 && progressPercent < 35) {
-        text = storyArc.buildup[0] || "";
-        label = "DISCOVERY";
-      } else if (progressPercent >= 39 && progressPercent < 52) {
-        text = storyArc.buildup[1] || "";
-        label = "DISCOVERY";
-      } else if (progressPercent >= 56 && progressPercent < 69) {
-        text = storyArc.buildup[2] || "";
-        label = "DISCOVERY";
-      } else if (progressPercent >= 73 && progressPercent < 86) {
-        text = storyArc.climax;
-        label = "REVELATION";
-        labelColor = "rgba(200, 100, 255, 1)";
-        borderColor = "rgba(200, 100, 255, 0.4)";
-      } else if (progressPercent >= 90 && progressPercent < 97) {
-        // اصلاح شد
-        text = storyArc.reveal;
-        label = "TRUTH REVEALED";
-        labelColor = "rgba(100, 255, 150, 1)";
-        borderColor = "rgba(100, 255, 150, 0.4)";
-      }
-    } else if (docSnippets.length > 0) {
-      const thresholds = [10, 28, 46, 64, 82]; // هماهنگی با DocumentaryOverlay
-      const activeIdx = thresholds.findIndex((t) => progressPercent >= t && progressPercent < t + 14);
-      if (activeIdx !== -1 && docSnippets[activeIdx]) {
-        text = docSnippets[activeIdx];
-      }
+    // Show narrative text progressively during assembly
+    // متن در 3 مرحله نمایش داده می‌شود:
+    // 1. 15-35%: بخش اول
+    // 2. 40-60%: بخش دوم
+    // 3. 65-85%: بخش سوم
+
+    let displayText = "";
+    let label = "CHAPTER NARRATIVE";
+    let labelColor = "rgba(100, 180, 255, 1)";
+    let borderColor = "rgba(100, 180, 255, 0.4)";
+
+    // Split narrative into 3 parts
+    const words = narrativeText.split(" ");
+    const third = Math.ceil(words.length / 3);
+    const part1 = words.slice(0, third).join(" ");
+    const part2 = words.slice(third, third * 2).join(" ");
+    const part3 = words.slice(third * 2).join(" ");
+
+    if (progressPercent >= 15 && progressPercent < 35) {
+      displayText = part1;
+      label = "BEGINNING";
+      labelColor = "rgba(120, 200, 255, 1)";
+      borderColor = "rgba(120, 200, 255, 0.4)";
+    } else if (progressPercent >= 40 && progressPercent < 60) {
+      displayText = part2;
+      label = "UNFOLDING";
+      labelColor = "rgba(150, 100, 255, 1)";
+      borderColor = "rgba(150, 100, 255, 0.4)";
+    } else if (progressPercent >= 65 && progressPercent < 85) {
+      displayText = part3;
+      label = "REVELATION";
+      labelColor = "rgba(255, 150, 100, 1)";
+      borderColor = "rgba(255, 150, 100, 0.4)";
     }
 
-    if (text) {
+    if (displayText) {
       ctx.save();
       const boxW = vWidth * 0.92;
       const boxX = (vWidth - boxW) / 2;
       const boxY = vHeight * 0.74;
 
       ctx.font = "bold 32px Inter, sans-serif";
-      const lines = wrapText(ctx, text, boxW - 140);
+      const lines = wrapText(ctx, displayText, boxW - 140);
       const lineHeight = 54;
       const boxH = 180 + lines.length * lineHeight;
 
@@ -274,7 +298,7 @@ export const renderPuzzleFrame = ({
       ctx.lineWidth = 4;
       ctx.stroke();
 
-      // Label (Dynamic based on phase)
+      // Label
       ctx.fillStyle = labelColor;
       ctx.font = "black 24px Inter, sans-serif";
       ctx.fillText(label, boxX + 70, boxY + 75);
@@ -298,7 +322,7 @@ export const renderPuzzleFrame = ({
     }
   }
 
-  // --- 4. CALL INDEPENDENT OUTRO MODULE ---
+  // ─── 5. OUTRO CARD (PHYSICS MODE) ─────────────────────────────────
   if (physicsPieces) {
     renderOutroCard({ ctx, vWidth, vHeight, elapsedAfterFinish, channelLogo });
   }

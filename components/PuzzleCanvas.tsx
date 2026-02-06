@@ -1,5 +1,5 @@
 import { useRef, useEffect, useState, useCallback, useImperativeHandle, forwardRef } from "react";
-import { PieceShape, PieceMaterial, MovementType, PuzzleBackground, StoryArc } from "../types";
+import { PieceShape, PieceMaterial, MovementType, PuzzleBackground } from "../types";
 import { usePuzzleLogic } from "../hooks/usePuzzleLogic";
 import { renderPuzzleFrame } from "../utils/puzzleRenderer";
 import { FINALE_PAUSE, WAVE_DURATION } from "../utils/finaleManager";
@@ -10,8 +10,8 @@ import PuzzleOverlay from "./puzzle/PuzzleOverlay";
 
 interface PuzzleCanvasProps {
   imageUrl: string | null;
-  durationMinutes: number; // فصل فعلی: chapter.durationSeconds / 60
-  pieceCount: number; // فصل فعلی: chapter.puzzleConfig.pieceCount
+  durationMinutes: number;
+  pieceCount: number;
   shape: PieceShape;
   material: PieceMaterial;
   movement: MovementType;
@@ -21,12 +21,11 @@ interface PuzzleCanvasProps {
   channelLogoUrl: string | null;
   onProgress: (p: number) => void;
   isSolving: boolean;
-  onFinished: () => void; // فصل تموم شد → صدا میشه
+  onFinished: () => void;
   onToggleSolve: () => void;
-  docSnippets?: string[];
-  storyArc?: StoryArc | null;
+  narrativeText: string; // 🔥 PHASE 1: متن فصل فعلی
   showDocumentaryTips?: boolean;
-  isLastChapter: boolean; // آخرین فصل؟ → FINALE پخش میشه یا نه
+  isLastChapter: boolean;
 }
 
 export interface CanvasHandle {
@@ -52,8 +51,7 @@ const PuzzleCanvas = forwardRef<CanvasHandle, PuzzleCanvasProps>(
       isSolving,
       onFinished,
       onToggleSolve,
-      docSnippets = [],
-      storyArc = null,
+      narrativeText,
       showDocumentaryTips = false,
       isLastChapter,
     },
@@ -157,8 +155,7 @@ const PuzzleCanvas = forwardRef<CanvasHandle, PuzzleCanvasProps>(
       piecesRef.current = remainingPieces;
     }, [piecesRef, getMatter, vWidth, vHeight]);
 
-    // ─── IMAGE LOADER + PIECE BUILDER ─────────────────────────────────
-    // وقتی imageUrl تغییر میکنه (فصل جدید شروع شد) → سیستم reset میکنه
+    // ─── 🔥 PHASE 1: OPTIMIZED IMAGE LOADER + PIECE BUILDER ──────────
     useEffect(() => {
       if (!imageUrl) return;
 
@@ -175,16 +172,36 @@ const PuzzleCanvas = forwardRef<CanvasHandle, PuzzleCanvasProps>(
 
       const img = new Image();
       img.crossOrigin = "anonymous";
+
       img.onload = async () => {
-        // isShorts حذف شد — فکشن: (img, pieceCount, shape, material, onProgress)
-        await createPieces(img, pieceCount, shape, material, (p) => setBuildProgress(Math.floor(p * 100)));
-        setIsReady(true);
-        if (isLastChapter) initPhysics(); // physics فقط آخرین فصل نیاز داره
+        // 🔥 OPTIMIZATION: Use requestIdleCallback for non-blocking piece creation
+        const createPiecesWithIdleCallback = () => {
+          return new Promise<void>((resolve) => {
+            const idleCallback = window.requestIdleCallback || ((cb) => setTimeout(cb, 1));
+
+            idleCallback(async () => {
+              await createPieces(img, pieceCount, shape, material, (p) => {
+                setBuildProgress(Math.floor(p * 100));
+              });
+              setIsReady(true);
+              if (isLastChapter) initPhysics();
+              resolve();
+            });
+          });
+        };
+
+        await createPiecesWithIdleCallback();
       };
+
       img.src = imageUrl;
+
+      // Cleanup
+      return () => {
+        img.onload = null;
+      };
     }, [imageUrl, pieceCount, shape, material, createPieces, initPhysics, isLastChapter]);
 
-    // ─── RENDER LOOP ──────────────────────────────────────────────────
+    // ─── 🔥 PHASE 1: OPTIMIZED RENDER LOOP ────────────────────────────
     const loop = useCallback(
       (now: number) => {
         if (!isSolving || !isReady || !imageRef.current) {
@@ -194,7 +211,7 @@ const PuzzleCanvas = forwardRef<CanvasHandle, PuzzleCanvasProps>(
 
         if (startTimeRef.current === null) startTimeRef.current = now;
 
-        const totalDuration = durationMinutes * 60 * 1000; // فصل فعلی طول
+        const totalDuration = durationMinutes * 60 * 1000;
         const elapsedSinceStart = now - startTimeRef.current;
 
         // ─── MOVE + SNAP صدا (هر فصل، نه فقط آخرین) ────────────────
@@ -217,7 +234,7 @@ const PuzzleCanvas = forwardRef<CanvasHandle, PuzzleCanvasProps>(
             midChapterFinishedRef.current = true;
             onProgress(100);
             onFinished();
-            return; // loop صدا نکنه دیگه
+            return;
           }
         }
 
@@ -258,7 +275,7 @@ const PuzzleCanvas = forwardRef<CanvasHandle, PuzzleCanvasProps>(
           });
         }
 
-        // ─── DRAW ─────────────────────────────────────────────────────
+        // ─── 🔥 PHASE 1: OPTIMIZED DRAW ───────────────────────────────
         const ctx = canvasRef.current?.getContext("2d", { alpha: false });
         if (ctx) {
           renderPuzzleFrame({
@@ -272,8 +289,7 @@ const PuzzleCanvas = forwardRef<CanvasHandle, PuzzleCanvasProps>(
             background,
             particles: [],
             physicsPieces: isPhysicsActiveRef.current ? physicsPiecesData : undefined,
-            docSnippets: showDocumentaryTips ? docSnippets : [],
-            storyArc: showDocumentaryTips ? storyArc || null : null,
+            narrativeText: showDocumentaryTips ? narrativeText : "",
             channelLogo: logoImgRef.current || undefined,
           });
 
@@ -295,9 +311,8 @@ const PuzzleCanvas = forwardRef<CanvasHandle, PuzzleCanvasProps>(
         piecesRef,
         activatePhysics,
         getMatter,
-        docSnippets,
+        narrativeText,
         showDocumentaryTips,
-        storyArc,
         isLastChapter,
       ]
     );
