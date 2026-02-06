@@ -1,12 +1,8 @@
 /**
- * Documentary Puzzle Studio — Narrative Engine
+ * 🔥 COMPLETE: Narrative Engine with AI Topic + Puzzle Variety
+ * Location: src/services/ai/narrativeEngine.ts
  *
- * فکشن اصلی: generateDocumentaryNarrative
- *   → یک documentary کامل با فصل‌های کامل میسازه
- *
- * فکشن‌های موندنی:
- *   detectMusicMoodFromTopic  → مود موسیقی از موضوع + NarrativeLens
- *   generateCoherentStoryArc  → StoryArc واحد (داخل pipeline هم استفاده میشه)
+ * این فایل کامل است و جایگزین narrativeEngine.ts فعلی می‌شود
  */
 
 import { GoogleGenAI, Type } from "@google/genai";
@@ -17,12 +13,16 @@ import {
   MusicMood,
   StoryArc,
   GENRE_PRESETS,
+  ChapterRole,
+  assignChapterRoles,
 } from "../../types";
 import { NarrativeGenerationResponse, NarrativeChapter } from "../types/serviceTypes";
+import { generateEngagingTopic } from "./topicGenerator";
+import { generateAllChapterPuzzles } from "./puzzleVariety";
 
-const getAI = () => new GoogleGenAI({ apiKey: process.env.API_KEY });
+const getAI = () => new GoogleGenAI({ apiKey: import.meta.env.VITE_GEMINI_API_KEY });
 
-// ─── MASTER STYLE PROMPT ──────────────────────────────────────────────
+// ─── STYLE PROMPTS ────────────────────────────────────────────────────
 
 const STYLE_PROMPTS: Record<MasterVisualStyle, string> = {
   [MasterVisualStyle.CINEMATIC]:
@@ -53,8 +53,7 @@ const GENRE_CONTEXT: Record<ReconstructionGenre, string> = {
 const buildMasterStylePrompt = (style: MasterVisualStyle, genre: ReconstructionGenre): string =>
   `Visual Style: ${STYLE_PROMPTS[style]}. Genre Context: ${GENRE_CONTEXT[genre]}. 9:16 vertical composition. 4K cinematic quality.`;
 
-// ─── MUSIC MOOD DETECTION (موندنی) ────────────────────────────────────
-// فالبک NEUTRAL → MYSTERIOUS (NEUTRAL در جدید types نیست)
+// ─── MUSIC MOOD DETECTION ─────────────────────────────────────────────
 
 export const detectMusicMoodFromTopic = (topic: string, narrativeLens: NarrativeLens): MusicMood => {
   const t = topic.toLowerCase();
@@ -86,7 +85,7 @@ export const detectMusicMoodFromTopic = (topic: string, narrativeLens: Narrative
   }
 };
 
-// ─── COHERENT STORY ARC (موندنی — واحد، نه multi-chapter) ────────────
+// ─── STORY ARC ────────────────────────────────────────────────────────
 
 export const generateCoherentStoryArc = async (
   topic: string,
@@ -109,7 +108,7 @@ export const generateCoherentStoryArc = async (
 
   try {
     const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
+      model: "gemini-2.0-flash-exp",
       contents: `Create a cohesive story arc for a documentary puzzle video about: "${topic}"
       Narrative Style: ${narrativeLens}
       ${lensInstructions[narrativeLens]}
@@ -143,7 +142,75 @@ export const generateCoherentStoryArc = async (
   }
 };
 
-// ─── MAIN: MULTI-CHAPTER DOCUMENTARY NARRATIVE ───────────────────────
+// ─── SENTENCE VALIDATION ──────────────────────────────────────────────
+
+const validateSentenceCompleteness = (text: string): boolean => {
+  const trimmed = text.trim();
+  if (!/[.!?]$/.test(trimmed)) return false;
+
+  const lastSentence =
+    trimmed
+      .split(/[.!?]/)
+      .filter((s) => s.trim())
+      .pop() || "";
+  const words = lastSentence.trim().split(/\s+/);
+  const lastWord = words[words.length - 1]?.toLowerCase() || "";
+
+  const incompleteMarkers = [
+    "of",
+    "and",
+    "the",
+    "but",
+    "however",
+    "with",
+    "for",
+    "in",
+    "on",
+    "at",
+    "to",
+    "a",
+    "an",
+    "or",
+    "as",
+    "if",
+    "when",
+    "while",
+    "because",
+    "although",
+    "though",
+    "since",
+    "until",
+    "before",
+    "after",
+    "during",
+    "within",
+    "without",
+    "between",
+    "among",
+    "through",
+    "by",
+  ];
+
+  return !incompleteMarkers.includes(lastWord);
+};
+
+const ensureCompleteNarrative = (text: string): string => {
+  if (validateSentenceCompleteness(text)) return text;
+
+  const sentences = text.split(/([.!?])\s+/).filter((s) => s.trim());
+  const complete: string[] = [];
+
+  for (let i = 0; i < sentences.length - 1; i += 2) {
+    const sentence = sentences[i] + (sentences[i + 1] || "");
+    if (validateSentenceCompleteness(sentence)) {
+      complete.push(sentence);
+    }
+  }
+
+  return complete.join(" ").trim();
+};
+
+// ─── MAIN GENERATION ──────────────────────────────────────────────────
 
 const LENS_INSTRUCTIONS: Record<NarrativeLens, string> = {
   [NarrativeLens.HIDDEN_DISCOVERY]:
@@ -169,7 +236,7 @@ const ROLE_DESCRIPTIONS: Record<string, string> = {
 };
 
 /**
- * یک documentary کامل با فصل‌های کامل میسازه.
+ * 🔥 COMPLETE: با AI topic generation + Puzzle variety
  */
 export const generateDocumentaryNarrative = async (
   genre: ReconstructionGenre,
@@ -181,33 +248,32 @@ export const generateDocumentaryNarrative = async (
   const ai = getAI();
   const preset = GENRE_PRESETS[genre];
 
-  // موضوع خالی → یکی از suggestedTopics
-  const finalTopic =
-    topic.trim().length > 0
-      ? topic
-      : preset.suggestedTopics[Math.floor(Math.random() * preset.suggestedTopics.length)];
+  // 🔥 AI TOPIC GENERATION
+  let finalTopic = topic.trim();
+  if (finalTopic.length === 0) {
+    console.log("🎯 No topic provided, generating AI topic...");
+    const topicData = await generateEngagingTopic(genre, narrativeLens);
+    finalTopic = topicData.topic;
+    console.log(`✅ AI Generated Topic: ${finalTopic} (Score: ${topicData.engagementScore}/10)`);
+  }
 
-  // chapterCount: هر 45s یک فصل، 60s intro+outro حذف شدن
   const chapterCount = Math.floor((targetDurationMinutes * 60 - 60) / 45);
-
   const masterStylePrompt = buildMasterStylePrompt(masterVisualStyle, genre);
 
-  // role array — mirrors assignChapterRoles logic
-  const roleArray: string[] = new Array(chapterCount).fill("RISING_ACTION");
-  roleArray[0] = "HOOK";
-  roleArray[chapterCount - 1] = "CONCLUSION";
-  const climaxIdx = Math.floor(chapterCount * 0.7);
-  const revealIdx = Math.min(climaxIdx + 1, chapterCount - 2);
-  roleArray[climaxIdx] = "CLIMAX";
-  roleArray[revealIdx] = "REVEAL";
+  const roleArray = assignChapterRoles(chapterCount);
+  const roleStrings = roleArray.map((r) => r.toString());
 
-  const chapterInstructions = roleArray
+  // 🔥 PUZZLE VARIETY GENERATION
+  console.log("🎨 Generating puzzle variety for chapters...");
+  const puzzleConfigs = generateAllChapterPuzzles(roleArray as ChapterRole[], chapterCount);
+
+  const chapterInstructions = roleStrings
     .map((role, i) => `  Chapter ${i + 1} (${role}): ${ROLE_DESCRIPTIONS[role]}`)
     .join("\n");
 
   try {
     const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
+      model: "gemini-2.0-flash-exp",
       contents: `You are creating a ${chapterCount}-chapter documentary puzzle video about: "${finalTopic}"
 
 Genre: ${genre}
@@ -217,28 +283,30 @@ ${LENS_INSTRUCTIONS[narrativeLens]}
 CHAPTER STRUCTURE (${chapterCount} chapters, each ~45 seconds):
 ${chapterInstructions}
 
-REQUIREMENTS:
+🔥 CRITICAL REQUIREMENTS FOR narrativeText:
+- MUST be 25-30 words (target for YouTube short-form vertical video)
+- MUST contain ONLY complete sentences (no sentences ending with: "of", "and", "the", "but", "however", "with", etc.)
+- Each sentence MUST end with proper punctuation (. ! ?)
+- If a sentence would be incomplete, finish it or remove it entirely
+- Ideal structure: 2-3 complete sentences that flow naturally
+- Display time: ~3-4 seconds per text box
+- Must be self-contained and make sense on its own
+
+OTHER REQUIREMENTS:
 - All ${chapterCount} chapters tell ONE continuous, coherent story
 - Each chapter flows naturally into the next
-- narrativeText: 2-3 sentences max per chapter
 - title: 3-5 words, dramatic
 - imagePrompt: ONE specific scene (no text in image), visually distinct per chapter
-- cliffhanger: end of each chapter except last — "But..." or "However..."
+- cliffhanger: end of each chapter except last
 - keyFact: one surprising, specific fact per chapter
-- Overall arc: curiosity → deepening → climax → revelation → reflection
 
-Also generate:
-- masterStylePrompt: short visual consistency note for this topic
-- storyArc: overall narrative with hook, buildup (3 items), climax, reveal, conclusion
-- keyFacts: array of most important facts across all chapters
-
-Return ONLY valid JSON matching this structure exactly:
+Return ONLY valid JSON:
 {
   "masterStylePrompt": "string",
   "storyArc": { "hook": "string", "buildup": ["string","string","string"], "climax": "string", "reveal": "string", "conclusion": "string" },
   "keyFacts": ["string","string","string"],
   "chapters": [
-    { "index": 0, "title": "string", "narrativeText": "string", "imagePrompt": "string", "cliffhanger": "string", "keyFact": "string" }
+    { "index": 0, "title": "string", "narrativeText": "string (25-30 words, complete sentences only)", "imagePrompt": "string", "cliffhanger": "string", "keyFact": "string" }
   ]
 }`,
       config: {
@@ -282,24 +350,34 @@ Return ONLY valid JSON matching this structure exactly:
 
     const data = JSON.parse(response.text || "{}");
 
+    // 🔥 POST-PROCESS: Complete narratives + Add puzzle variety
+    const processedChapters = (data.chapters || []).map((ch: NarrativeChapter, i: number) => ({
+      ...ch,
+      narrativeText: ensureCompleteNarrative(ch.narrativeText),
+      puzzleConfig: puzzleConfigs[i],
+    }));
+
     return {
       genre,
       topic: finalTopic,
       masterStylePrompt: masterStylePrompt + " " + (data.masterStylePrompt || ""),
       storyArc: data.storyArc as StoryArc,
-      chapters: (data.chapters || []) as NarrativeChapter[],
+      chapters: processedChapters,
       keyFacts: data.keyFacts || [],
     };
   } catch (e) {
     console.error("❌ [narrativeEngine] generateDocumentaryNarrative failed:", e);
 
-    const fallbackChapters: NarrativeChapter[] = roleArray.map((_, i) => ({
+    const fallbackChapters: NarrativeChapter[] = roleStrings.map((_, i) => ({
       index: i,
-      title: i === 0 ? "The Beginning" : i === roleArray.length - 1 ? "The End" : `Chapter ${i + 1}`,
-      narrativeText: `Chapter ${i + 1} of the documentary about ${finalTopic}.`,
+      title: i === 0 ? "The Beginning" : i === roleStrings.length - 1 ? "The End" : `Chapter ${i + 1}`,
+      narrativeText: `Chapter ${
+        i + 1
+      } explores the fascinating story of ${finalTopic}. Each piece reveals something new about this incredible journey.`,
       imagePrompt: `A dramatic scene related to ${finalTopic}, moment ${i + 1}`,
-      cliffhanger: i < roleArray.length - 1 ? "But there is more to this story..." : "",
+      cliffhanger: i < roleStrings.length - 1 ? "But there is more to this story..." : "",
       keyFact: `Key fact ${i + 1} about ${finalTopic}`,
+      puzzleConfig: puzzleConfigs[i],
     }));
 
     return {

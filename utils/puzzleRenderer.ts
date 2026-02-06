@@ -16,11 +16,24 @@ export interface RenderOptions {
   background: PuzzleBackground;
   particles: any[];
   physicsPieces?: Map<number, { x: number; y: number; angle: number }>;
-  narrativeText?: string; // 🔥 PHASE 1: متن فصل فعلی
+  narrativeText?: string;
   channelLogo?: HTMLImageElement;
 }
 
-// ─── 🔥 PHASE 1: CACHED TEXT WRAPPING ─────────────────────────────────
+// ─── 🔥 PHASE A FIX: CACHED SORTING ───────────────────────────────────
+let cachedSortedPieces: Piece[] = [];
+let lastPiecesReference: Piece[] | null = null;
+
+const getSortedPieces = (pieces: Piece[]): Piece[] => {
+  // Only re-sort if pieces array reference changed (new chapter)
+  if (pieces !== lastPiecesReference) {
+    cachedSortedPieces = [...pieces].sort((a, b) => a.zOrder - b.zOrder);
+    lastPiecesReference = pieces;
+  }
+  return cachedSortedPieces;
+};
+
+// ─── TEXT WRAPPING CACHE ──────────────────────────────────────────────
 const textWrapCache = new Map<string, string[]>();
 
 const wrapText = (ctx: CanvasRenderingContext2D, text: string, maxWidth: number): string[] => {
@@ -51,7 +64,7 @@ const wrapText = (ctx: CanvasRenderingContext2D, text: string, maxWidth: number)
   return lines;
 };
 
-// ─── 🔥 PHASE 1: OPTIMIZED KINETIC TRANSFORM (inline για performance) ─
+// ─── KINETIC TRANSFORM ────────────────────────────────────────────────
 const calculateKineticTransform = (
   p: Piece,
   t: number,
@@ -109,21 +122,7 @@ const calculateKineticTransform = (
   return { x, y, rot, scale };
 };
 
-// ─── 🔥 PHASE 1: CACHED SORTED PIECES ─────────────────────────────────
-let lastSortedPieces: Piece[] = [];
-let lastSortKey = "";
-
-const getSortedPieces = (pieces: Piece[]): Piece[] => {
-  const currentKey = pieces.map((p) => `${p.id}-${p.zOrder}`).join(",");
-  if (currentKey === lastSortKey && lastSortedPieces.length === pieces.length) {
-    return lastSortedPieces;
-  }
-  lastSortedPieces = [...pieces].sort((a, b) => a.zOrder - b.zOrder);
-  lastSortKey = currentKey;
-  return lastSortedPieces;
-};
-
-// ─── 🔥 PHASE 1: MAIN RENDER FUNCTION (OPTIMIZED) ─────────────────────
+// ─── MAIN RENDER FUNCTION ─────────────────────────────────────────────
 export const renderPuzzleFrame = ({
   ctx,
   img,
@@ -165,27 +164,34 @@ export const renderPuzzleFrame = ({
   ctx.drawImage(img, 0, 0, vWidth, vHeight);
   ctx.globalAlpha = 1.0;
 
-  // ─── 🔥 PHASE 1: USE CACHED SORTED PIECES ─────────────────────────
+  // ─── 🔥 PHASE A FIX: USE CACHED SORTED PIECES ─────────────────────
   const sorted = getSortedPieces(pieces);
   const completedPieces: Piece[] = [];
   const movingPieces: Piece[] = [];
 
-  // Pre-calculate tRaw for all pieces (avoid recalculation)
+  // ─── 🔥 PHASE A FIX: STRICT PIECE LIFECYCLE ───────────────────────
   for (const p of sorted) {
+    // Check if this piece is in physics mode (final chapter only)
+    if (physicsPieces?.has(p.id)) {
+      movingPieces.push(p);
+      continue;
+    }
+
+    // Calculate movement progress
     const delay = (p.assemblyOrder / totalPieces) * (totalDuration - 2700);
     const tRaw = Math.max(0, Math.min((elapsed - delay) / 2700, 1));
     (p as any).tRaw = tRaw;
 
-    if (physicsPieces?.has(p.id)) {
-      movingPieces.push(p);
-    } else if (tRaw >= 1) {
+    // 🔥 STRICT BOUNDARY: tRaw must be exactly 1.0 to be "completed"
+    // This prevents glitches where pieces flicker between states
+    if (tRaw >= 0.9999) {
       completedPieces.push(p);
     } else if (tRaw > 0) {
       movingPieces.push(p);
     }
   }
 
-  // ─── 2. RENDER COMPLETED PIECES (BATCH) ───────────────────────────
+  // ─── 2. RENDER COMPLETED PIECES ───────────────────────────────────
   for (const p of completedPieces) {
     const waveY = fState.waveActive ? getDiagonalWaveY(p, elapsedAfterFinish, vWidth, vHeight) : 0;
     const drawX = p.tx - (p.cachedCanvas!.width - p.pw) / 2;
@@ -193,12 +199,12 @@ export const renderPuzzleFrame = ({
     ctx.drawImage(p.cachedCanvas!, drawX, drawY);
   }
 
-  // ─── 3. RENDER MOVING PIECES (OPTIMIZED) ──────────────────────────
+  // ─── 3. RENDER MOVING PIECES ──────────────────────────────────────
   for (const p of movingPieces) {
     const physicsData = physicsPieces?.get(p.id);
 
     if (physicsData) {
-      // Physics mode (fast path)
+      // Physics mode (final chapter)
       ctx.save();
       ctx.translate(physicsData.x, physicsData.y);
       ctx.rotate(physicsData.angle);
@@ -233,20 +239,11 @@ export const renderPuzzleFrame = ({
 
   ctx.restore();
 
-  // ─── 4. 🔥 PHASE 1: NARRATIVE TEXT OVERLAY (OPTIMIZED) ─────────────
+  // ─── 4. NARRATIVE TEXT OVERLAY ────────────────────────────────────
   if (!physicsPieces && narrativeText) {
     const progressPercent = (Math.min(elapsed, totalDuration) / totalDuration) * 100;
 
-    // Show narrative text progressively during assembly
-    // متن در 3 مرحله نمایش داده می‌شود:
-    // 1. 15-35%: بخش اول
-    // 2. 40-60%: بخش دوم
-    // 3. 65-85%: بخش سوم
-
     let displayText = "";
-    let label = "CHAPTER NARRATIVE";
-    let labelColor = "rgba(100, 180, 255, 1)";
-    let borderColor = "rgba(100, 180, 255, 0.4)";
 
     // Split narrative into 3 parts
     const words = narrativeText.split(" ");
@@ -257,19 +254,10 @@ export const renderPuzzleFrame = ({
 
     if (progressPercent >= 15 && progressPercent < 35) {
       displayText = part1;
-      label = "BEGINNING";
-      labelColor = "rgba(120, 200, 255, 1)";
-      borderColor = "rgba(120, 200, 255, 0.4)";
     } else if (progressPercent >= 40 && progressPercent < 60) {
       displayText = part2;
-      label = "UNFOLDING";
-      labelColor = "rgba(150, 100, 255, 1)";
-      borderColor = "rgba(150, 100, 255, 0.4)";
     } else if (progressPercent >= 65 && progressPercent < 85) {
       displayText = part3;
-      label = "REVELATION";
-      labelColor = "rgba(255, 150, 100, 1)";
-      borderColor = "rgba(255, 150, 100, 0.4)";
     }
 
     if (displayText) {
@@ -281,7 +269,7 @@ export const renderPuzzleFrame = ({
       ctx.font = "bold 32px Inter, sans-serif";
       const lines = wrapText(ctx, displayText, boxW - 140);
       const lineHeight = 54;
-      const boxH = 180 + lines.length * lineHeight;
+      const boxH = 140 + lines.length * lineHeight; // 🔥 Removed label, reduced height
 
       const floatY = Math.sin(elapsed / 600) * 8;
       ctx.translate(0, floatY);
@@ -294,35 +282,24 @@ export const renderPuzzleFrame = ({
       ctx.roundRect(boxX, boxY, boxW, boxH, 50);
       ctx.fill();
 
-      ctx.strokeStyle = borderColor;
+      ctx.strokeStyle = "rgba(100, 180, 255, 0.4)";
       ctx.lineWidth = 4;
       ctx.stroke();
 
-      // Label
-      ctx.fillStyle = labelColor;
-      ctx.font = "black 24px Inter, sans-serif";
-      ctx.fillText(label, boxX + 70, boxY + 75);
-
-      // Divider Line
-      ctx.strokeStyle = "rgba(255, 255, 255, 0.1)";
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.moveTo(boxX + 65, boxY + 105);
-      ctx.lineTo(boxX + boxW - 65, boxY + 105);
-      ctx.stroke();
+      // 🔥 REMOVED LABEL - cleaner look for YouTube
 
       // Content Text
       ctx.fillStyle = "#ffffff";
       ctx.font = "bold 32px Inter, sans-serif";
       lines.forEach((line, i) => {
-        ctx.fillText(line, boxX + 70, boxY + 175 + i * lineHeight);
+        ctx.fillText(line, boxX + 70, boxY + 85 + i * lineHeight); // Adjusted Y offset
       });
 
       ctx.restore();
     }
   }
 
-  // ─── 5. OUTRO CARD (PHYSICS MODE) ─────────────────────────────────
+  // ─── 5. OUTRO CARD ────────────────────────────────────────────────
   if (physicsPieces) {
     renderOutroCard({ ctx, vWidth, vHeight, elapsedAfterFinish, channelLogo });
   }

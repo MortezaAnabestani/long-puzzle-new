@@ -4,6 +4,7 @@ import { usePuzzleLogic } from "../hooks/usePuzzleLogic";
 import { renderPuzzleFrame } from "../utils/puzzleRenderer";
 import { FINALE_PAUSE, WAVE_DURATION } from "../utils/finaleManager";
 import { sonicEngine } from "../services/proceduralAudio";
+import { clearAllTrails } from "../utils/trailEffects";
 import PuzzleOverlay from "./puzzle/PuzzleOverlay";
 
 // ─── PROPS ────────────────────────────────────────────────────────────
@@ -23,7 +24,7 @@ interface PuzzleCanvasProps {
   isSolving: boolean;
   onFinished: () => void;
   onToggleSolve: () => void;
-  narrativeText: string; // 🔥 PHASE 1: متن فصل فعلی
+  narrativeText: string;
   showDocumentaryTips?: boolean;
   isLastChapter: boolean;
 }
@@ -82,6 +83,9 @@ const PuzzleCanvas = forwardRef<CanvasHandle, PuzzleCanvasProps>(
     // ─── فصل میانی: وقتی progress 100% شد، فوراً onFinished صدا میشه
     const midChapterFinishedRef = useRef(false);
 
+    // ─── 🔥 PHASE A FIX: Warm-up flag ─────────────────────────────────
+    const warmupCompleteRef = useRef(false);
+
     // ─── channel logo ─────────────────────────────────────────────────
     const logoImgRef = useRef<HTMLImageElement | null>(null);
 
@@ -105,10 +109,14 @@ const PuzzleCanvas = forwardRef<CanvasHandle, PuzzleCanvasProps>(
     const initPhysics = useCallback(() => {
       const Matter = getMatter();
       if (!Matter) return;
+
+      // 🔥 PHASE A FIX: Complete cleanup
       if (engineRef.current) {
         Matter.World.clear(engineRef.current.world, false);
         Matter.Engine.clear(engineRef.current);
+        engineRef.current = null;
       }
+
       const engine = Matter.Engine.create();
       engine.world.gravity.y = 2.0;
       const ground = Matter.Bodies.rectangle(vWidth / 2, vHeight + 500, vWidth * 10, 1000, {
@@ -155,9 +163,38 @@ const PuzzleCanvas = forwardRef<CanvasHandle, PuzzleCanvasProps>(
       piecesRef.current = remainingPieces;
     }, [piecesRef, getMatter, vWidth, vHeight]);
 
-    // ─── 🔥 PHASE 1: OPTIMIZED IMAGE LOADER + PIECE BUILDER ──────────
+    // ─── 🔥 PHASE A FIX: COMPLETE CLEANUP ON CHAPTER CHANGE ──────────
+    const cleanupChapter = useCallback(() => {
+      const Matter = getMatter();
+
+      // Clear trails
+      clearAllTrails();
+
+      // Clear physics completely
+      if (engineRef.current && Matter) {
+        Matter.World.clear(engineRef.current.world, false);
+        Matter.Engine.clear(engineRef.current);
+        engineRef.current = null;
+      }
+
+      // Clear all refs
+      bodiesRef.current.clear();
+      isPhysicsActiveRef.current = false;
+      warmupCompleteRef.current = false;
+
+      // Clear audio timeouts
+      if (snapTimeoutRef.current) {
+        clearTimeout(snapTimeoutRef.current);
+        snapTimeoutRef.current = null;
+      }
+    }, [getMatter]);
+
+    // ─── IMAGE LOADER + PIECE BUILDER ─────────────────────────────────
     useEffect(() => {
       if (!imageUrl) return;
+
+      // ─── 🔥 PHASE A FIX: Complete cleanup before loading new chapter
+      cleanupChapter();
 
       // ─── reset کل state فصل قبلی ──────────────────────────────────
       setIsReady(false);
@@ -166,42 +203,35 @@ const PuzzleCanvas = forwardRef<CanvasHandle, PuzzleCanvasProps>(
       wavePlayedRef.current = false;
       destructionPlayedRef.current = false;
       lastIntervalRef.current = -1;
-      isPhysicsActiveRef.current = false;
       midChapterFinishedRef.current = false;
-      bodiesRef.current.clear();
 
       const img = new Image();
       img.crossOrigin = "anonymous";
-
       img.onload = async () => {
-        // 🔥 OPTIMIZATION: Use requestIdleCallback for non-blocking piece creation
-        const createPiecesWithIdleCallback = () => {
-          return new Promise<void>((resolve) => {
-            const idleCallback = window.requestIdleCallback || ((cb) => setTimeout(cb, 1));
-
-            idleCallback(async () => {
-              await createPieces(img, pieceCount, shape, material, (p) => {
-                setBuildProgress(Math.floor(p * 100));
-              });
-              setIsReady(true);
-              if (isLastChapter) initPhysics();
-              resolve();
-            });
-          });
-        };
-
-        await createPiecesWithIdleCallback();
+        await createPieces(img, pieceCount, shape, material, (p) => setBuildProgress(Math.floor(p * 100)));
+        setIsReady(true);
+        if (isLastChapter) initPhysics();
       };
-
       img.src = imageUrl;
 
-      // Cleanup
+      // Cleanup on unmount
       return () => {
-        img.onload = null;
+        cleanupChapter();
       };
-    }, [imageUrl, pieceCount, shape, material, createPieces, initPhysics, isLastChapter]);
+    }, [imageUrl, pieceCount, shape, material, createPieces, initPhysics, isLastChapter, cleanupChapter]);
 
-    // ─── 🔥 PHASE 1: OPTIMIZED RENDER LOOP ────────────────────────────
+    // ─── 🔥 PHASE A FIX: WARM-UP PHASE ───────────────────────────────
+    useEffect(() => {
+      if (isReady && !warmupCompleteRef.current) {
+        // Warm-up: pre-calculate sorted pieces
+        if (piecesRef.current.length > 0) {
+          piecesRef.current.sort((a, b) => a.zOrder - b.zOrder);
+          warmupCompleteRef.current = true;
+        }
+      }
+    }, [isReady, piecesRef]);
+
+    // ─── RENDER LOOP ──────────────────────────────────────────────────
     const loop = useCallback(
       (now: number) => {
         if (!isSolving || !isReady || !imageRef.current) {
@@ -275,7 +305,7 @@ const PuzzleCanvas = forwardRef<CanvasHandle, PuzzleCanvasProps>(
           });
         }
 
-        // ─── 🔥 PHASE 1: OPTIMIZED DRAW ───────────────────────────────
+        // ─── DRAW ─────────────────────────────────────────────────────
         const ctx = canvasRef.current?.getContext("2d", { alpha: false });
         if (ctx) {
           renderPuzzleFrame({
