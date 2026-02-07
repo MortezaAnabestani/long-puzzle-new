@@ -24,7 +24,7 @@ export const extractCoreSubject = async (
 
   try {
     const response = await ai.models.generateContent({
-      model: 'gemini-3-pro-preview',
+      model: "gemini-2.5-flash",
       contents: `Analyze this content and extract its CORE SUBJECT in a single concise sentence (max 100 characters).
 
 Visual Prompt: "${visualPrompt}"
@@ -42,14 +42,14 @@ Examples:
 - "Ancient pyramid's hidden water channels revealed through thermal imaging"
 - "Quantum entanglement's role in bird migration navigation systems"
 
-Return ONLY the core subject sentence, nothing else.`
+Return ONLY the core subject sentence, nothing else.`,
     });
 
     const coreSubject = response.text?.trim() || visualPrompt.substring(0, 100);
     console.log(`🎯 Extracted core subject: "${coreSubject}"`);
     return coreSubject;
   } catch (error) {
-    console.error('Failed to extract core subject:', error);
+    console.error("Failed to extract core subject:", error);
     return visualPrompt.substring(0, 100);
   }
 };
@@ -71,7 +71,7 @@ export const checkContentSimilarity = async (
       isSimilar: false,
       similarityScore: 0,
       matchedSubjects: [],
-      reasoning: 'No previous content to compare against'
+      reasoning: "No previous content to compare against",
     };
   }
 
@@ -80,14 +80,14 @@ export const checkContentSimilarity = async (
 
   try {
     const response = await ai.models.generateContent({
-      model: 'gemini-3-pro-preview',
+      model: "gemini-2.5-flash",
       contents: `Analyze if this NEW content idea is TOO SIMILAR to any PREVIOUS content.
 
 NEW CONTENT:
 "${newCoreSubject}"
 
 PREVIOUS CONTENT (last 50):
-${recentSubjects.map((s, i) => `${i + 1}. ${s}`).join('\n')}
+${recentSubjects.map((s, i) => `${i + 1}. ${s}`).join("\n")}
 
 SIMILARITY CRITERIA:
 - Consider SEMANTIC meaning, not just word matching
@@ -118,26 +118,30 @@ Threshold: ${threshold} (similarity >= ${threshold} means REJECT)`,
             isSimilar: { type: Type.BOOLEAN },
             similarityScore: { type: Type.NUMBER },
             matchedSubjects: { type: Type.ARRAY, items: { type: Type.STRING } },
-            reasoning: { type: Type.STRING }
+            reasoning: { type: Type.STRING },
           },
-          required: ["isSimilar", "similarityScore", "matchedSubjects", "reasoning"]
-        }
-      }
+          required: ["isSimilar", "similarityScore", "matchedSubjects", "reasoning"],
+        },
+      },
     });
 
     const result = JSON.parse(response.text || "{}");
-    console.log(`🔍 Similarity check: ${result.isSimilar ? '❌ TOO SIMILAR' : '✅ UNIQUE'} (score: ${result.similarityScore})`);
+    console.log(
+      `🔍 Similarity check: ${result.isSimilar ? "❌ TOO SIMILAR" : "✅ UNIQUE"} (score: ${
+        result.similarityScore
+      })`
+    );
     console.log(`   Reasoning: ${result.reasoning}`);
 
     return result;
   } catch (error) {
-    console.error('Failed to check content similarity:', error);
+    console.error("Failed to check content similarity:", error);
     // On error, be conservative and allow the content
     return {
       isSimilar: false,
       similarityScore: 0,
       matchedSubjects: [],
-      reasoning: 'Similarity check failed, allowing content'
+      reasoning: "Similarity check failed, allowing content",
     };
   }
 };

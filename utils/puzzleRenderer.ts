@@ -18,6 +18,7 @@ export interface RenderOptions {
   physicsPieces?: Map<number, { x: number; y: number; angle: number }>;
   narrativeText?: string;
   channelLogo?: HTMLImageElement;
+  completedPuzzleSnapshots?: HTMLImageElement[]; // 🔥 برای اسلایدشو
 }
 
 // ─── 🔥 PHASE A FIX: CACHED SORTING ───────────────────────────────────
@@ -135,6 +136,7 @@ export const renderPuzzleFrame = ({
   physicsPieces,
   narrativeText = "",
   channelLogo,
+  completedPuzzleSnapshots,
 }: RenderOptions): number => {
   const vWidth = 1080;
   const vHeight = 2280;
@@ -143,6 +145,48 @@ export const renderPuzzleFrame = ({
 
   const elapsedAfterFinish = Math.max(0, elapsed - totalDuration);
   const fState = getFinaleState(elapsedAfterFinish);
+
+  // ─── 🔥 SLIDESHOW PHASE ────────────────────────────────────────────
+  if (fState.slideshowActive && completedPuzzleSnapshots && completedPuzzleSnapshots.length > 0) {
+    const slideImage = completedPuzzleSnapshots[fState.currentSlide];
+    if (slideImage) {
+      // Clear background
+      ctx.fillStyle = "#000000";
+      ctx.fillRect(0, 0, vWidth, vHeight);
+
+      // Fade in/out
+      const fadeIn = Math.min(fState.slideProgress * 3, 1);
+      const fadeOut = fState.slideProgress > 0.7 ? 1 - (fState.slideProgress - 0.7) / 0.3 : 1;
+      const opacity = fadeIn * fadeOut;
+
+      ctx.save();
+      ctx.globalAlpha = opacity;
+
+      // Scale effect
+      const scale = 0.95 + Math.sin(fState.slideProgress * Math.PI) * 0.05;
+      ctx.translate(vWidth / 2, vHeight / 2);
+      ctx.scale(scale, scale);
+      ctx.translate(-vWidth / 2, -vHeight / 2);
+
+      // Draw slide
+      ctx.drawImage(slideImage, 0, 0, vWidth, vHeight);
+
+      // Slide number indicator
+      ctx.globalAlpha = opacity * 0.6;
+      ctx.fillStyle = "#007acc";
+      ctx.font = "bold 80px Inter";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(
+        `${fState.currentSlide + 1} / ${completedPuzzleSnapshots.length}`,
+        vWidth / 2,
+        vHeight - 150
+      );
+
+      ctx.restore();
+      return 100; // slideshow active
+    }
+  }
 
   // ─── 1. ENVIRONMENT ───────────────────────────────────────────────
   if (!physicsPieces) {

@@ -558,7 +558,7 @@ export const useProductionPipeline = (
             narrativeText: nc.narrativeText,
             imagePrompt: nc.imagePrompt,
             imageUrl: null,
-            puzzleConfig: {
+            puzzleConfig: nc.puzzleConfig || {
               pieceCount,
               shape: preferences.defaultShape,
               material: preferences.defaultMaterial,

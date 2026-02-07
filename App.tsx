@@ -25,6 +25,7 @@ import MetadataStudio from "./components/engagement/MetadataStudio";
 import ThumbnailGenerator from "./components/ThumbnailGenerator";
 import AudioStatus from "./components/layout/AudioStatus";
 import RecordingSystem from "./components/RecordingSystem";
+import EngagementCTA from "./components/puzzle/EngagementCTA";
 import { MusicTrack } from "./components/sidebar/MusicUploader";
 import { playWithFade, pauseWithFade } from "./utils/audioFade";
 import { BackendModeProvider } from "./contexts/BackendModeContext";
@@ -65,11 +66,19 @@ const AppContent: React.FC = () => {
   const [engagementGifUrl, setEngagementGifUrl] = useState<string | null>(null);
   const [channelLogoUrl, setChannelLogoUrl] = useState<string | null>(null);
 
+  // ─── 🔥 CTA GLOBAL TIMING ───────────────────────────────────────────
+  const [globalElapsedTime, setGlobalElapsedTime] = useState(0);
+  const [showMidCTA, setShowMidCTA] = useState(false);
+  const [showFinalCTA, setShowFinalCTA] = useState(false);
+  const globalTimerRef = useRef<number | null>(null);
+  const logoImgRef = useRef<HTMLImageElement | null>(null);
+
   // ─── REFS ───────────────────────────────────────────────────────────
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const musicBufferRef = useRef<AudioBuffer | null>(null);
   const canvasHandleRef = useRef<CanvasHandle>(null);
   const transitionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const completedPuzzleSnapshots = useRef<HTMLImageElement[]>([]); // 🔥 اسلایدشو
 
   // ─── CLOUD TRACK ────────────────────────────────────────────────────
   const handleAddCloudTrack = useCallback(
@@ -122,6 +131,60 @@ const AppContent: React.FC = () => {
       preloadImg.src = nextImageUrl;
     }
   }, [nextImageUrl]);
+
+  // ─── 🔥 GLOBAL TIMER FOR CTA ────────────────────────────────────────
+  useEffect(() => {
+    if (state.isSolving && !state.isTransitioning) {
+      const startTime = performance.now();
+
+      const updateTimer = () => {
+        const elapsed = performance.now() - startTime;
+        setGlobalElapsedTime(elapsed);
+        globalTimerRef.current = requestAnimationFrame(updateTimer);
+      };
+
+      globalTimerRef.current = requestAnimationFrame(updateTimer);
+    } else {
+      if (globalTimerRef.current) {
+        cancelAnimationFrame(globalTimerRef.current);
+        globalTimerRef.current = null;
+      }
+    }
+
+    return () => {
+      if (globalTimerRef.current) {
+        cancelAnimationFrame(globalTimerRef.current);
+      }
+    };
+  }, [state.isSolving, state.isTransitioning]);
+
+  // ─── 🔥 CTA TIMING LOGIC ────────────────────────────────────────────
+  useEffect(() => {
+    if (!state.project) return;
+
+    const elapsedSeconds = globalElapsedTime / 1000;
+
+    // Mid-CTA: 2:30 - 3:30 (150-210 seconds)
+    const showMid = elapsedSeconds >= 150 && elapsedSeconds <= 210;
+    setShowMidCTA(showMid);
+
+    // Final-CTA: 5:00 - 6:00 (300-360 seconds)
+    const showFinal = elapsedSeconds >= 300 && elapsedSeconds <= 360;
+    setShowFinalCTA(showFinal);
+  }, [globalElapsedTime, state.project]);
+
+  // ─── 🔥 CHANNEL LOGO LOADER ─────────────────────────────────────────
+  useEffect(() => {
+    if (channelLogoUrl) {
+      const img = new Image();
+      img.src = channelLogoUrl;
+      img.onload = () => {
+        logoImgRef.current = img;
+      };
+    } else {
+      logoImgRef.current = null;
+    }
+  }, [channelLogoUrl]);
 
   // ─── CHAPTER ADVANCE ────────────────────────────────────────────────
   /**
@@ -195,8 +258,25 @@ const AppContent: React.FC = () => {
 
   // ─── PUZZLE FINISHED (فصل فعلی تموم شد) ────────────────────────────
   const handlePuzzleFinished = useCallback(() => {
+    // 🔥 ذخیره snapshot برای اسلایدشو (فقط فصل‌های میانی)
+    if (
+      canvasHandleRef.current &&
+      state.project &&
+      state.currentChapterIndex < state.project.chapters.length - 1
+    ) {
+      const canvas = canvasHandleRef.current.getCanvas();
+      if (canvas) {
+        const snapshot = new Image();
+        snapshot.src = canvas.toDataURL("image/png");
+        snapshot.onload = () => {
+          completedPuzzleSnapshots.current.push(snapshot);
+          console.log(`📸 Snapshot saved: ${completedPuzzleSnapshots.current.length} total`);
+        };
+      }
+    }
+
     advanceToNextChapter();
-  }, [advanceToNextChapter]);
+  }, [advanceToNextChapter, state.project, state.currentChapterIndex]);
 
   // ─── START / PAUSE ──────────────────────────────────────────────────
   const handleToggleSolve = useCallback(() => {
@@ -395,6 +475,7 @@ const AppContent: React.FC = () => {
             isLastChapter={
               state.project ? state.currentChapterIndex === state.project.chapters.length - 1 : false
             }
+            completedPuzzleSnapshots={completedPuzzleSnapshots.current}
           />
         </section>
 
@@ -420,6 +501,11 @@ const AppContent: React.FC = () => {
           hasError={state.audioError}
         />
       </main>
+
+      {/* ── 🔥 GLOBAL CTAs ────────────────────────────────────────── */}
+      {showMidCTA && <EngagementCTA isVisible={true} variant="mid" channelLogo={logoImgRef.current} />}
+
+      {showFinalCTA && <EngagementCTA isVisible={true} variant="final" channelLogo={logoImgRef.current} />}
     </div>
   );
 };

@@ -88,7 +88,7 @@ export const generateEngagingTopic = async (
 
   try {
     const response = await ai.models.generateContent({
-      model: "gemini-2.0-flash-exp",
+      model: "gemini-2.5-flash",
       contents: `You are an expert YouTube content strategist specializing in documentary puzzle videos.
 
 TASK: Generate ONE highly engaging topic for a ${genre} video.

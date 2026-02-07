@@ -27,6 +27,9 @@ interface PuzzleCanvasProps {
   narrativeText: string;
   showDocumentaryTips?: boolean;
   isLastChapter: boolean;
+  totalDurationMinutes?: number;
+  currentChapterIndex?: number;
+  completedPuzzleSnapshots?: HTMLImageElement[]; // 🔥 اسلایدشو
 }
 
 export interface CanvasHandle {
@@ -55,6 +58,7 @@ const PuzzleCanvas = forwardRef<CanvasHandle, PuzzleCanvasProps>(
       narrativeText,
       showDocumentaryTips = false,
       isLastChapter,
+      completedPuzzleSnapshots,
     },
     ref
   ) => {
@@ -258,12 +262,47 @@ const PuzzleCanvas = forwardRef<CanvasHandle, PuzzleCanvasProps>(
           }
         }
 
-        // ─── فصل میانی: progress 100% → فوراً onFinished ─────────────
+        // ─── فصل میانی: ترنزیشن باد → onFinished ────────────────────
         if (!isLastChapter) {
           if (elapsedSinceStart >= totalDuration && !midChapterFinishedRef.current) {
             midChapterFinishedRef.current = true;
             onProgress(100);
-            onFinished();
+
+            // 🔥 WIND TRANSITION
+            const windFromRight = Math.random() > 0.5;
+            const Matter = getMatter();
+
+            if (Matter && !engineRef.current) {
+              const engine = Matter.Engine.create();
+              engine.world.gravity.y = 1.5;
+              engineRef.current = engine;
+
+              const windForce = windFromRight ? -0.25 : 0.25;
+              const bodies: any[] = [];
+
+              piecesRef.current.forEach((p) => {
+                const body = Matter.Bodies.rectangle(p.tx + p.pw / 2, p.ty + p.ph / 2, p.pw, p.ph, {
+                  restitution: 0.4,
+                  friction: 0.05,
+                });
+                Matter.Body.applyForce(body, body.position, {
+                  x: windForce * (0.8 + Math.random() * 0.4),
+                  y: -0.05 * Math.random(),
+                });
+                bodies.push(body);
+                bodiesRef.current.set(p.id, body);
+              });
+
+              Matter.World.add(engine.world, bodies);
+              isPhysicsActiveRef.current = true;
+              sonicEngine.play("WAVE", 1.5);
+
+              setTimeout(() => {
+                onFinished();
+              }, 1500);
+            } else {
+              onFinished();
+            }
             return;
           }
         }
@@ -321,6 +360,7 @@ const PuzzleCanvas = forwardRef<CanvasHandle, PuzzleCanvasProps>(
             physicsPieces: isPhysicsActiveRef.current ? physicsPiecesData : undefined,
             narrativeText: showDocumentaryTips ? narrativeText : "",
             channelLogo: logoImgRef.current || undefined,
+            completedPuzzleSnapshots, // 🔥 اسلایدشو
           });
 
           const progressPercent = (Math.min(elapsedSinceStart, totalDuration) / totalDuration) * 100;

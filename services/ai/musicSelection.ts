@@ -97,7 +97,7 @@ export const findSmartMusicByMood = async (
 
   try {
     const response = await ai.models.generateContent({
-      model: "gemini-3-pro-preview",
+      model: "gemini-2.5-flash",
       contents: `Find a 100% ROYALTY-FREE (YouTube Safe) direct MP3 download link for PUZZLE-SOLVING background music.
 
       CORE CONTEXT: This music is for a PUZZLE VIDEO where pieces come together calmly and satisfyingly.

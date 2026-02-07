@@ -23,6 +23,7 @@ interface CanvasAreaProps {
   showDocumentaryTips?: boolean;
   progress: number;
   isLastChapter: boolean;
+  completedPuzzleSnapshots?: HTMLImageElement[];
 }
 
 const CanvasArea: React.FC<CanvasAreaProps> = ({
@@ -45,6 +46,7 @@ const CanvasArea: React.FC<CanvasAreaProps> = ({
   showDocumentaryTips = false,
   progress,
   isLastChapter,
+  completedPuzzleSnapshots,
 }) => {
   const phoneFrameRef = useRef<HTMLDivElement>(null);
 
@@ -115,6 +117,7 @@ const CanvasArea: React.FC<CanvasAreaProps> = ({
                 narrativeText={narrativeText}
                 showDocumentaryTips={showDocumentaryTips}
                 isLastChapter={isLastChapter}
+                completedPuzzleSnapshots={completedPuzzleSnapshots}
               />
             ) : (
               <div className="absolute inset-0 flex flex-col items-center justify-center bg-[#050508]">

@@ -19,18 +19,11 @@ export type {
 
 // ==================== MODULE RE-EXPORTS ====================
 
-// Art Generation
-export { generateArtImage } from "./ai/artGeneration";
-
 // Music Selection
 export { findSmartMusicByMood, findSmartMusic, SONIC_LIBRARY } from "./ai/musicSelection";
 
 // Story Arc & Visual Prompts
-export {
-  generateCoherentStoryArc,
-  generateVisualPromptFromTopic,
-  generateDocumentarySnippets,
-} from "./ai/storyArc";
+export { generateCoherentStoryArc } from "./ai/storyArc";
 
 // Content Validation
 export { extractCoreSubject, checkContentSimilarity } from "./ai/contentValidation";
@@ -91,7 +84,7 @@ export const generateEnhancedMetadata = async (
 
   try {
     const response = await ai.models.generateContent({
-      model: "gemini-3-pro-preview",
+      model: "gemini-2.5-flash",
       contents: `Create strategic YouTube Shorts metadata for a puzzle reveal video.
 
       Topic: "${topic}"
@@ -100,23 +93,34 @@ export const generateEnhancedMetadata = async (
       Story Hook: ${storyArc.hook}
       Story Reveal: ${storyArc.reveal}
 
-      TITLE STRATEGY:
+      TITLE STRATEGY (CRITICAL - YouTube Thumbnail Standard):
+      - MUST be 100% English - NO Persian, Arabic, Emoji, or special characters
+      - Maximum 50-60 characters (fit in thumbnail without overflow)
       - Must create curiosity gap (promise revelation without spoiling)
       - Use power words: Secret, Hidden, Why, Truth, Mystery, Revealed
-      - Keep under 60 characters
       - Must match what the video actually delivers
+      - Test: Can it fit in ONE line on mobile thumbnail?
       - Example patterns:
         * "The Secret Behind [X] Revealed"
         * "Why [X] Does [Y] - The Truth"
         * "Hidden Truth About [X]"
         * "[X] vs [Y]: The Shocking Reality"
 
-      DESCRIPTION STRATEGY:
-      - First sentence: Expand on the title's promise
-      - Second: Hint at the journey (the buildup)
-      - Third: Tease the reveal without spoiling
-      - Include 2-3 relevant hashtags at the end
-      - Keep under 200 characters total
+      DESCRIPTION STRATEGY (Enhanced for SEO):
+      - Length: 300-500 words (YouTube prefers detailed descriptions)
+      - Structure:
+        1. Opening Hook (2-3 sentences): Expand on title's promise
+        2. Content Preview (3-4 sentences): Tease the journey WITHOUT spoilers
+        3. Timeline Markers (CRITICAL for engagement):
+           0:00 - Introduction
+           0:15 - [Chapter 1 title]
+           0:45 - [Chapter 2 title]
+           ... (all chapter timestamps)
+        4. Conclusion (1-2 sentences): Call to action (like, subscribe, comment)
+        5. Relevant hashtags (2-3 at the very end)
+      - SEO Keywords: Naturally integrate topic-related keywords
+      - Engagement: Ask a question to encourage comments
+      - NO spoilers but create anticipation
 
       TAGS STRATEGY:
       - Mix broad terms (3-4) with specific niche terms (4-5)
@@ -165,7 +169,7 @@ export const generateYouTubeMetadata = async (subject: string, style: ArtStyle) 
   const ai = getAIInstance();
   try {
     const response = await ai.models.generateContent({
-      model: "gemini-3-pro-preview",
+      model: "gemini-2.5-flash",
       contents: `Create viral YouTube Shorts metadata for a puzzle reveal video about: "${subject}".
       The style is ${style}. Include a clickbaity title, a description with a curiosity loop, and 10 relevant tags.
       Also provide a CTR strategy summary. Return JSON.`,
@@ -203,7 +207,7 @@ export const generateYouTubeMetadata = async (subject: string, style: ArtStyle) 
 export const fetchFactNarrative = async (): Promise<string> => {
   const ai = getAIInstance();
   const response = await ai.models.generateContent({
-    model: "gemini-3-pro-preview",
+    model: "gemini-2.5-flash",
     contents:
       "Tell me one high-impact, mysterious historical fact that would be amazing to reveal in a puzzle. Under 100 characters.",
   });
@@ -218,7 +222,7 @@ export const getTrendingTopics = async (): Promise<string[]> => {
   const ai = getAIInstance();
   try {
     const response = await ai.models.generateContent({
-      model: "gemini-3-pro-preview",
+      model: "gemini-2.5-flash",
       contents: `List 5 CURRENT trending topics from the last 48 hours that would make viral puzzle video content.
 
       CONTENT CATEGORIES (Mix and match):
@@ -265,20 +269,22 @@ export const getTrendingTopics = async (): Promise<string[]> => {
       },
     });
     const data = JSON.parse(response.text || "{}");
-    return data.topics || [
-      "Latest AI breakthrough making headlines",
-      "Celebrity fashion moment going viral",
-      "Breaking tech announcement everyone's talking about",
-      "Trending social media challenge of the week",
-      "Major sports record shattered today"
-    ];
+    return (
+      data.topics || [
+        "Latest AI breakthrough making headlines",
+        "Celebrity fashion moment going viral",
+        "Breaking tech announcement everyone's talking about",
+        "Trending social media challenge of the week",
+        "Major sports record shattered today",
+      ]
+    );
   } catch {
     return [
       "Latest AI breakthrough making headlines",
       "Celebrity fashion moment going viral",
       "Breaking tech announcement everyone's talking about",
       "Trending social media challenge of the week",
-      "Major sports record shattered today"
+      "Major sports record shattered today",
     ];
   }
 };

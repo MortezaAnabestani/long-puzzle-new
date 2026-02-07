@@ -20,7 +20,7 @@ import { NarrativeGenerationResponse, NarrativeChapter } from "../types/serviceT
 import { generateEngagingTopic } from "./topicGenerator";
 import { generateAllChapterPuzzles } from "./puzzleVariety";
 
-const getAI = () => new GoogleGenAI({ apiKey: import.meta.env.VITE_GEMINI_API_KEY });
+const getAI = () => new GoogleGenAI({ apiKey: process.env.API_KEY });
 
 // ─── STYLE PROMPTS ────────────────────────────────────────────────────
 
@@ -108,7 +108,7 @@ export const generateCoherentStoryArc = async (
 
   try {
     const response = await ai.models.generateContent({
-      model: "gemini-2.0-flash-exp",
+      model: "gemini-2.5-flash",
       contents: `Create a cohesive story arc for a documentary puzzle video about: "${topic}"
       Narrative Style: ${narrativeLens}
       ${lensInstructions[narrativeLens]}
@@ -273,7 +273,7 @@ export const generateDocumentaryNarrative = async (
 
   try {
     const response = await ai.models.generateContent({
-      model: "gemini-2.0-flash-exp",
+      model: "gemini-2.5-flash",
       contents: `You are creating a ${chapterCount}-chapter documentary puzzle video about: "${finalTopic}"
 
 Genre: ${genre}
