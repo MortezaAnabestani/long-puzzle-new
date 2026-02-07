@@ -6,6 +6,7 @@ import { FINALE_PAUSE, WAVE_DURATION } from "../utils/finaleManager";
 import { sonicEngine } from "../services/proceduralAudio";
 import { clearAllTrails } from "../utils/trailEffects";
 import PuzzleOverlay from "./puzzle/PuzzleOverlay";
+import { transitionEngine } from "../utils/transitions/transitionEngine";
 
 // ─── PROPS ────────────────────────────────────────────────────────────
 
@@ -29,7 +30,7 @@ interface PuzzleCanvasProps {
   isLastChapter: boolean;
   totalDurationMinutes?: number;
   currentChapterIndex?: number;
-  completedPuzzleSnapshots?: HTMLImageElement[]; // 🔥 اسلایدشو
+  completedPuzzleSnapshots?: HTMLImageElement[];
 }
 
 export interface CanvasHandle {
@@ -73,6 +74,10 @@ const PuzzleCanvas = forwardRef<CanvasHandle, PuzzleCanvasProps>(
     const animationRef = useRef<number>(0);
     const startTimeRef = useRef<number | null>(null);
 
+    // ─── TRANSITION SYSTEM REFS ───────────────────────────────────────
+    const transitionCleanupRef = useRef<(() => void) | null>(null);
+    const isTransitioningRef = useRef(false);
+
     // ─── physics (فقط آخرین فصل) ─────────────────────────────────────
     const engineRef = useRef<any>(null);
     const bodiesRef = useRef<Map<number, any>>(new Map());
@@ -87,7 +92,7 @@ const PuzzleCanvas = forwardRef<CanvasHandle, PuzzleCanvasProps>(
     // ─── فصل میانی: وقتی progress 100% شد، فوراً onFinished صدا میشه
     const midChapterFinishedRef = useRef(false);
 
-    // ─── 🔥 PHASE A FIX: Warm-up flag ─────────────────────────────────
+    // ─── Warm-up flag ─────────────────────────────────────────────────
     const warmupCompleteRef = useRef(false);
 
     // ─── channel logo ─────────────────────────────────────────────────
@@ -114,7 +119,6 @@ const PuzzleCanvas = forwardRef<CanvasHandle, PuzzleCanvasProps>(
       const Matter = getMatter();
       if (!Matter) return;
 
-      // 🔥 PHASE A FIX: Complete cleanup
       if (engineRef.current) {
         Matter.World.clear(engineRef.current.world, false);
         Matter.Engine.clear(engineRef.current);
@@ -167,12 +171,19 @@ const PuzzleCanvas = forwardRef<CanvasHandle, PuzzleCanvasProps>(
       piecesRef.current = remainingPieces;
     }, [piecesRef, getMatter, vWidth, vHeight]);
 
-    // ─── 🔥 PHASE A FIX: COMPLETE CLEANUP ON CHAPTER CHANGE ──────────
+    // ─── COMPLETE CLEANUP ON CHAPTER CHANGE ──────────────────────────
     const cleanupChapter = useCallback(() => {
       const Matter = getMatter();
 
       // Clear trails
       clearAllTrails();
+
+      // ✅ CLEANUP TRANSITION SYSTEM
+      if (transitionCleanupRef.current) {
+        transitionCleanupRef.current();
+        transitionCleanupRef.current = null;
+      }
+      isTransitioningRef.current = false;
 
       // Clear physics completely
       if (engineRef.current && Matter) {
@@ -197,10 +208,10 @@ const PuzzleCanvas = forwardRef<CanvasHandle, PuzzleCanvasProps>(
     useEffect(() => {
       if (!imageUrl) return;
 
-      // ─── 🔥 PHASE A FIX: Complete cleanup before loading new chapter
+      // Complete cleanup before loading new chapter
       cleanupChapter();
 
-      // ─── reset کل state فصل قبلی ──────────────────────────────────
+      // reset کل state فصل قبلی
       setIsReady(false);
       setBuildProgress(0);
       startTimeRef.current = null;
@@ -224,10 +235,9 @@ const PuzzleCanvas = forwardRef<CanvasHandle, PuzzleCanvasProps>(
       };
     }, [imageUrl, pieceCount, shape, material, createPieces, initPhysics, isLastChapter, cleanupChapter]);
 
-    // ─── 🔥 PHASE A FIX: WARM-UP PHASE ───────────────────────────────
+    // ─── WARM-UP PHASE ────────────────────────────────────────────────
     useEffect(() => {
       if (isReady && !warmupCompleteRef.current) {
-        // Warm-up: pre-calculate sorted pieces
         if (piecesRef.current.length > 0) {
           piecesRef.current.sort((a, b) => a.zOrder - b.zOrder);
           warmupCompleteRef.current = true;
@@ -262,46 +272,42 @@ const PuzzleCanvas = forwardRef<CanvasHandle, PuzzleCanvasProps>(
           }
         }
 
-        // ─── فصل میانی: ترنزیشن باد → onFinished ────────────────────
+        // ─── 🎬 فصل میانی: ترنزیشن جدید ────────────────────────────
         if (!isLastChapter) {
           if (elapsedSinceStart >= totalDuration && !midChapterFinishedRef.current) {
             midChapterFinishedRef.current = true;
             onProgress(100);
 
-            // 🔥 WIND TRANSITION
-            const windFromRight = Math.random() > 0.5;
-            const Matter = getMatter();
+            // ✅ NEW TRANSITION SYSTEM
+            if (!isTransitioningRef.current) {
+              isTransitioningRef.current = true;
 
-            if (Matter && !engineRef.current) {
-              const engine = Matter.Engine.create();
-              engine.world.gravity.y = 1.5;
-              engineRef.current = engine;
+              console.log("🎬 [PuzzleCanvas] Starting transition...");
 
-              const windForce = windFromRight ? -0.25 : 0.25;
-              const bodies: any[] = [];
+              // Initialize physics engine for transition
+              if (!engineRef.current) {
+                const Matter = getMatter();
+                if (Matter) {
+                  engineRef.current = Matter.Engine.create();
+                }
+              }
 
-              piecesRef.current.forEach((p) => {
-                const body = Matter.Bodies.rectangle(p.tx + p.pw / 2, p.ty + p.ph / 2, p.pw, p.ph, {
-                  restitution: 0.4,
-                  friction: 0.05,
-                });
-                Matter.Body.applyForce(body, body.position, {
-                  x: windForce * (0.8 + Math.random() * 0.4),
-                  y: -0.05 * Math.random(),
-                });
-                bodies.push(body);
-                bodiesRef.current.set(p.id, body);
-              });
+              // Apply random transition effect
+              const randomEffect = transitionEngine.getRandomEffect();
 
-              Matter.World.add(engine.world, bodies);
-              isPhysicsActiveRef.current = true;
-              sonicEngine.play("WAVE", 1.5);
-
-              setTimeout(() => {
-                onFinished();
-              }, 1500);
-            } else {
-              onFinished();
+              transitionCleanupRef.current = transitionEngine.applyTransition(
+                piecesRef.current,
+                engineRef.current,
+                vWidth,
+                vHeight,
+                randomEffect,
+                () => {
+                  // Callback after transition complete
+                  console.log("✅ [PuzzleCanvas] Transition complete, moving to next chapter");
+                  isTransitioningRef.current = false;
+                  onFinished();
+                }
+              );
             }
             return;
           }
@@ -330,10 +336,17 @@ const PuzzleCanvas = forwardRef<CanvasHandle, PuzzleCanvasProps>(
           }
         }
 
-        // ─── physics update (فقط آخرین فصل) ──────────────────────────
-        const physicsPiecesData = new Map();
+        // ─── UPDATE PHYSICS ───────────────────────────────────────────
+        let physicsPiecesData = new Map();
         const Matter = getMatter();
-        if (isPhysicsActiveRef.current && engineRef.current && Matter) {
+
+        // Update transition physics (for mid-chapters)
+        if (isTransitioningRef.current && engineRef.current) {
+          transitionEngine.update(16.666);
+          physicsPiecesData = transitionEngine.getPhysicsData();
+        }
+        // Update finale physics (for last chapter)
+        else if (isPhysicsActiveRef.current && engineRef.current && Matter) {
           Matter.Engine.update(engineRef.current, 16.666);
           bodiesRef.current.forEach((body: any, id: number) => {
             physicsPiecesData.set(id, {
@@ -357,10 +370,10 @@ const PuzzleCanvas = forwardRef<CanvasHandle, PuzzleCanvasProps>(
             movement,
             background,
             particles: [],
-            physicsPieces: isPhysicsActiveRef.current ? physicsPiecesData : undefined,
+            physicsPieces: physicsPiecesData.size > 0 ? physicsPiecesData : undefined,
             narrativeText: showDocumentaryTips ? narrativeText : "",
             channelLogo: logoImgRef.current || undefined,
-            completedPuzzleSnapshots, // 🔥 اسلایدشو
+            completedPuzzleSnapshots,
           });
 
           const progressPercent = (Math.min(elapsedSinceStart, totalDuration) / totalDuration) * 100;
@@ -384,6 +397,9 @@ const PuzzleCanvas = forwardRef<CanvasHandle, PuzzleCanvasProps>(
         narrativeText,
         showDocumentaryTips,
         isLastChapter,
+        vWidth,
+        vHeight,
+        completedPuzzleSnapshots,
       ]
     );
 
