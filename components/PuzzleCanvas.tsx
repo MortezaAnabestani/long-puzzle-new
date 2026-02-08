@@ -9,8 +9,6 @@ import PuzzleOverlay from "./puzzle/PuzzleOverlay";
 import { transitionEngine } from "../utils/transitions/transitionEngine";
 import { renderTransition } from "../utils/transitions/transitionRenderer";
 
-// ─── PROPS ────────────────────────────────────────────────────────────
-
 interface PuzzleCanvasProps {
   imageUrl: string | null;
   durationMinutes: number;
@@ -25,10 +23,12 @@ interface PuzzleCanvasProps {
   onProgress: (p: number) => void;
   isSolving: boolean;
   onFinished: () => void;
+  onTransitionComplete: () => void;
   onToggleSolve: () => void;
   narrativeText: string;
   showDocumentaryTips?: boolean;
   isLastChapter: boolean;
+  isTransitioning: boolean;
   totalDurationMinutes?: number;
   currentChapterIndex?: number;
   completedPuzzleSnapshots?: HTMLImageElement[];
@@ -37,8 +37,6 @@ interface PuzzleCanvasProps {
 export interface CanvasHandle {
   getCanvas: () => HTMLCanvasElement | null;
 }
-
-// ─── COMPONENT ────────────────────────────────────────────────────────
 
 const PuzzleCanvas = forwardRef<CanvasHandle, PuzzleCanvasProps>(
   (
@@ -56,10 +54,12 @@ const PuzzleCanvas = forwardRef<CanvasHandle, PuzzleCanvasProps>(
       onProgress,
       isSolving,
       onFinished,
+      onTransitionComplete,
       onToggleSolve,
       narrativeText,
       showDocumentaryTips = false,
       isLastChapter,
+      isTransitioning,
       completedPuzzleSnapshots,
     },
     ref
@@ -75,34 +75,31 @@ const PuzzleCanvas = forwardRef<CanvasHandle, PuzzleCanvasProps>(
     const animationRef = useRef<number>(0);
     const startTimeRef = useRef<number | null>(null);
 
-    // ─── TRANSITION SYSTEM REFS ───────────────────────────────────────
+    // Transition
     const transitionCleanupRef = useRef<(() => void) | null>(null);
     const isTransitioningRef = useRef(false);
+    const transitionCallbackFiredRef = useRef(false);
 
-    // ─── physics (فقط آخرین فصل) ─────────────────────────────────────
+    // Physics (last chapter only)
     const engineRef = useRef<any>(null);
     const bodiesRef = useRef<Map<number, any>>(new Map());
     const isPhysicsActiveRef = useRef(false);
 
-    // ─── صدا و timing refs ───────────────────────────────────────────
+    // Audio
     const wavePlayedRef = useRef(false);
     const destructionPlayedRef = useRef(false);
     const lastIntervalRef = useRef<number>(-1);
     const snapTimeoutRef = useRef<number | null>(null);
 
-    // ─── فصل میانی: فلگ برای اینکه ترنزیشن شروع شده
-    const transitionStartedRef = useRef(false);
-
-    // ─── Warm-up flag ─────────────────────────────────────────────────
+    // Flags
+    const puzzleFinishedCalledRef = useRef(false);
     const warmupCompleteRef = useRef(false);
-
-    // ─── channel logo ─────────────────────────────────────────────────
     const logoImgRef = useRef<HTMLImageElement | null>(null);
 
     useImperativeHandle(ref, () => ({ getCanvas: () => canvasRef.current }));
     const getMatter = useCallback(() => (window as any).Matter, []);
 
-    // ─── LOGO LOADER ──────────────────────────────────────────────────
+    // ─── LOGO ───────────────────────────────────────────────────────
     useEffect(() => {
       if (channelLogoUrl) {
         const img = new Image();
@@ -115,13 +112,10 @@ const PuzzleCanvas = forwardRef<CanvasHandle, PuzzleCanvasProps>(
       }
     }, [channelLogoUrl]);
 
-    // ─── PHYSICS INIT (برای هر دو نوع فصل نیاز هست) ───────────────────
+    // ─── PHYSICS INIT ───────────────────────────────────────────────
     const initPhysics = useCallback(() => {
       const Matter = getMatter();
-      if (!Matter) {
-        console.warn("⚠️ Matter.js not loaded!");
-        return;
-      }
+      if (!Matter) return;
 
       if (engineRef.current) {
         Matter.World.clear(engineRef.current.world, false);
@@ -129,12 +123,8 @@ const PuzzleCanvas = forwardRef<CanvasHandle, PuzzleCanvasProps>(
         engineRef.current = null;
       }
 
-      // ساخت engine ساده (بدون gravity برای فصل میانی)
-      const engine = Matter.Engine.create({
-        gravity: { x: 0, y: 0 },
-      });
+      const engine = Matter.Engine.create({ gravity: { x: 0, y: 0 } });
 
-      // فقط برای فصل آخر ground اضافه می‌کنیم
       if (isLastChapter) {
         engine.world.gravity.y = 2.0;
         const ground = Matter.Bodies.rectangle(vWidth / 2, vHeight + 500, vWidth * 10, 1000, {
@@ -144,10 +134,10 @@ const PuzzleCanvas = forwardRef<CanvasHandle, PuzzleCanvasProps>(
       }
 
       engineRef.current = engine;
-      console.log(`✅ Physics engine initialized (isLastChapter: ${isLastChapter})`);
+      console.log(`✅ [Canvas] Physics initialized (isLastChapter: ${isLastChapter})`);
     }, [getMatter, vWidth, vHeight, isLastChapter]);
 
-    // ─── PHYSICS ACTIVATE (فقط آخرین فصل) ────────────────────────────
+    // ─── PHYSICS ACTIVATE (last chapter only) ───────────────────────
     const activatePhysics = useCallback(() => {
       const Matter = getMatter();
       if (!engineRef.current || isPhysicsActiveRef.current || !Matter) return;
@@ -184,24 +174,22 @@ const PuzzleCanvas = forwardRef<CanvasHandle, PuzzleCanvasProps>(
       piecesRef.current = remainingPieces;
     }, [piecesRef, getMatter, vWidth, vHeight]);
 
-    // ─── COMPLETE CLEANUP ON CHAPTER CHANGE ──────────────────────────
+    // ─── CLEANUP ────────────────────────────────────────────────────
     const cleanupChapter = useCallback(() => {
       const Matter = getMatter();
-
-      console.log("🧹 Cleaning up chapter...");
+      console.log("🧹 [Canvas] Cleanup");
 
       clearAllTrails();
 
-      // ✅ CLEANUP TRANSITION SYSTEM
       if (transitionCleanupRef.current) {
         transitionCleanupRef.current();
         transitionCleanupRef.current = null;
       }
       transitionEngine.cleanup();
       isTransitioningRef.current = false;
-      transitionStartedRef.current = false;
+      transitionCallbackFiredRef.current = false;
+      puzzleFinishedCalledRef.current = false;
 
-      // ✅ CLEANUP PHYSICS ENGINE
       if (engineRef.current && Matter) {
         Matter.World.clear(engineRef.current.world, false);
         Matter.Engine.clear(engineRef.current);
@@ -218,47 +206,83 @@ const PuzzleCanvas = forwardRef<CanvasHandle, PuzzleCanvasProps>(
       }
     }, [getMatter]);
 
-    // ─── IMAGE LOADER + PIECE BUILDER ─────────────────────────────────
+    // ─── IMAGE LOADER ───────────────────────────────────────────────
     useEffect(() => {
       if (!imageUrl) return;
 
-      cleanupChapter();
+      console.log(`🔄 [Canvas] Loading: ${imageUrl.substring(0, 40)}...`);
 
+      cleanupChapter();
       setIsReady(false);
       setBuildProgress(0);
       startTimeRef.current = null;
       wavePlayedRef.current = false;
       destructionPlayedRef.current = false;
       lastIntervalRef.current = -1;
-      transitionStartedRef.current = false;
 
       const img = new Image();
       img.crossOrigin = "anonymous";
       img.onload = async () => {
+        console.log(`🖼️ [Canvas] Creating pieces...`);
         await createPieces(img, pieceCount, shape, material, (p) => setBuildProgress(Math.floor(p * 100)));
         setIsReady(true);
-
-        // ✅ همیشه engine را initialize می‌کنیم (برای transition و physics)
         initPhysics();
+        console.log(`✅ [Canvas] Ready`);
       };
       img.src = imageUrl;
 
-      return () => {
-        cleanupChapter();
-      };
+      return cleanupChapter;
     }, [imageUrl, pieceCount, shape, material, createPieces, initPhysics, cleanupChapter]);
 
-    // ─── WARM-UP PHASE ────────────────────────────────────────────────
+    // ─── WARMUP ─────────────────────────────────────────────────────
     useEffect(() => {
-      if (isReady && !warmupCompleteRef.current) {
-        if (piecesRef.current.length > 0) {
-          piecesRef.current.sort((a, b) => a.zOrder - b.zOrder);
-          warmupCompleteRef.current = true;
-        }
+      if (isReady && !warmupCompleteRef.current && piecesRef.current.length > 0) {
+        piecesRef.current.sort((a, b) => a.zOrder - b.zOrder);
+        warmupCompleteRef.current = true;
+        console.log(`🎨 [Canvas] Warmup done`);
       }
     }, [isReady, piecesRef]);
 
-    // ─── RENDER LOOP ──────────────────────────────────────────────────
+    // ─── ✅ WATCH TRANSITION STATE ──────────────────────────────────
+    useEffect(() => {
+      console.log(`🎬 [Canvas] isTransitioning changed to: ${isTransitioning}`);
+
+      // ✅ وقتی App میگه ترنزیشن شروع شده
+      if (isTransitioning && !isTransitioningRef.current) {
+        console.log(`🚀 [Canvas] Starting transition effect...`);
+        isTransitioningRef.current = true;
+        transitionCallbackFiredRef.current = false;
+
+        if (engineRef.current) {
+          const effect = transitionEngine.getRandomEffect();
+
+          transitionCleanupRef.current = transitionEngine.applyTransition(
+            piecesRef.current,
+            engineRef.current,
+            vWidth,
+            vHeight,
+            effect,
+            () => {
+              if (transitionCallbackFiredRef.current) {
+                console.warn(`⚠️ [Canvas] Callback already fired`);
+                return;
+              }
+
+              transitionCallbackFiredRef.current = true;
+              console.log(`✅ [Canvas] Transition done - calling onTransitionComplete`);
+
+              // ✅ کمی تاخیر برای اطمینان از render آخر
+              setTimeout(() => {
+                isTransitioningRef.current = false;
+                onTransitionComplete();
+              }, 100);
+            }
+          );
+        }
+      }
+    }, [isTransitioning, vWidth, vHeight, onTransitionComplete, piecesRef]);
+
+    // ─── RENDER LOOP ────────────────────────────────────────────────
     const loop = useCallback(
       (now: number) => {
         if (!isSolving || !isReady || !imageRef.current) {
@@ -266,90 +290,61 @@ const PuzzleCanvas = forwardRef<CanvasHandle, PuzzleCanvasProps>(
           return;
         }
 
-        if (startTimeRef.current === null) startTimeRef.current = now;
+        if (startTimeRef.current === null) {
+          startTimeRef.current = now;
+          console.log(`⏱️ [Canvas] Timer started`);
+        }
 
         const totalDuration = durationMinutes * 60 * 1000;
-        const elapsedSinceStart = now - startTimeRef.current;
+        const elapsed = now - startTimeRef.current;
 
-        // ─── MOVE + SNAP صدا (هر فصل) ────────────────────────────────
-        if (elapsedSinceStart < totalDuration && !isTransitioningRef.current) {
-          const intervalMs = 4000;
-          const currentInterval = Math.floor(elapsedSinceStart / intervalMs);
-          if (currentInterval > lastIntervalRef.current) {
-            lastIntervalRef.current = currentInterval;
+        // Audio (before transition)
+        if (elapsed < totalDuration && !isTransitioningRef.current) {
+          const interval = 4000;
+          const current = Math.floor(elapsed / interval);
+          if (current > lastIntervalRef.current) {
+            lastIntervalRef.current = current;
             sonicEngine.play("MOVE", 1.0);
             if (snapTimeoutRef.current) clearTimeout(snapTimeoutRef.current);
-            snapTimeoutRef.current = window.setTimeout(() => {
-              sonicEngine.play("SNAP", 2.0);
-            }, 600);
+            snapTimeoutRef.current = window.setTimeout(() => sonicEngine.play("SNAP", 2.0), 600);
           }
         }
 
-        // ─── 🎬 فصل میانی: ترنزیشن حرفه‌ای بدون تأخیر ──────────────────
-        if (!isLastChapter) {
-          // ✅ بلافاصله پس از رسیدن به 100% ترنزیشن شروع می‌شود
-          if (elapsedSinceStart >= totalDuration && !transitionStartedRef.current) {
-            transitionStartedRef.current = true;
-            isTransitioningRef.current = true;
-            onProgress(100);
-
-            console.log("🎬 [PuzzleCanvas] Starting transition immediately...");
-
-            if (engineRef.current) {
-              const randomEffect = transitionEngine.getRandomEffect();
-
-              transitionCleanupRef.current = transitionEngine.applyTransition(
-                piecesRef.current,
-                engineRef.current,
-                vWidth,
-                vHeight,
-                randomEffect,
-                () => {
-                  console.log("✅ [PuzzleCanvas] Transition complete - loading next puzzle");
-                  isTransitioningRef.current = false;
-                  onFinished();
-                }
-              );
-            }
-          }
+        // ✅ PUZZLE COMPLETE → onFinished (فقط یک بار)
+        if (elapsed >= totalDuration && !puzzleFinishedCalledRef.current && !isLastChapter) {
+          puzzleFinishedCalledRef.current = true;
+          console.log(`🏁 [Canvas] Puzzle finished - calling onFinished`);
+          onFinished();
         }
 
-        // ─── آخرین فصل: FINALE timeline ───────────────────────────────
+        // Last chapter finale
         if (isLastChapter) {
-          const elapsedAfterFinish = Math.max(0, elapsedSinceStart - totalDuration);
+          const afterFinish = Math.max(0, elapsed - totalDuration);
 
-          // ✅ WAVE صدا فقط برای آخرین فصل
-          if (elapsedAfterFinish > FINALE_PAUSE && !wavePlayedRef.current) {
+          if (afterFinish > FINALE_PAUSE && !wavePlayedRef.current) {
             sonicEngine.play("WAVE", 2.5);
             wavePlayedRef.current = true;
           }
 
-          const explosionTriggerTime = totalDuration + FINALE_PAUSE + WAVE_DURATION + 1500;
-          if (elapsedSinceStart >= explosionTriggerTime && !isPhysicsActiveRef.current) {
+          const explosionTime = totalDuration + FINALE_PAUSE + WAVE_DURATION + 1500;
+          if (elapsed >= explosionTime && !isPhysicsActiveRef.current) {
             activatePhysics();
           }
 
-          if (isPhysicsActiveRef.current && elapsedSinceStart >= explosionTriggerTime + 10000) {
+          if (isPhysicsActiveRef.current && elapsed >= explosionTime + 10000) {
             onFinished();
             return;
           }
         }
 
-        // ─── UPDATE PHYSICS & TRANSITION ──────────────────────────────
-        let physicsPiecesData = new Map();
+        // Physics update
+        let physicsPieces = new Map();
         const Matter = getMatter();
 
-        let transitionProgress = 0;
-        let transitionType: string | null = null;
-
-        if (isTransitioningRef.current) {
-          transitionProgress = transitionEngine.getTransitionProgress();
-          transitionType = transitionEngine.getTransitionType();
-        } else if (isPhysicsActiveRef.current && engineRef.current && Matter) {
-          // Physics فقط برای فصل آخر
+        if (isPhysicsActiveRef.current && engineRef.current && Matter) {
           Matter.Engine.update(engineRef.current, 16.666);
           bodiesRef.current.forEach((body: any, id: number) => {
-            physicsPiecesData.set(id, {
+            physicsPieces.set(id, {
               x: body.position.x,
               y: body.position.y,
               angle: body.angle,
@@ -357,53 +352,63 @@ const PuzzleCanvas = forwardRef<CanvasHandle, PuzzleCanvasProps>(
           });
         }
 
-        // ─── DRAW ─────────────────────────────────────────────────────
+        // Transition progress
+        let transProgress = 0;
+        let transType: string | null = null;
+        if (isTransitioningRef.current) {
+          transProgress = transitionEngine.getTransitionProgress();
+          transType = transitionEngine.getTransitionType();
+        }
+
+        // ✅ RENDER
         const ctx = canvasRef.current?.getContext("2d", { alpha: false });
         if (ctx) {
-          // ✅ اگر در حال ترنزیشن: فقط رندر ترنزیشن
-          if (isTransitioningRef.current && transitionType && transitionProgress < 1) {
-            // پس‌زمینه مشکی
+          if (isTransitioningRef.current && transType) {
+            // ✅ TRANSITION RENDER با قطعات کامل
             ctx.fillStyle = "#000000";
             ctx.fillRect(0, 0, vWidth, vHeight);
 
-            // رندر ترنزیشن
+            // ✅ آماده‌سازی داده قطعات برای renderer
+            const piecesWithImage = piecesRef.current.map((p) => ({
+              ...p,
+              img: imageRef.current, // ✅ اضافه کردن reference به تصویر اصلی
+            }));
+
             renderTransition(
               ctx,
-              transitionType,
-              transitionProgress,
+              transType,
+              transProgress,
               vWidth,
               vHeight,
               engineRef.current,
-              piecesRef.current
+              piecesWithImage // ✅ پاس دادن قطعات با تصویر
             );
-          } else if (!isTransitioningRef.current) {
-            // ✅ رندر عادی پازل (فقط وقتی ترنزیشن فعال نیست)
+          } else {
+            // Normal render
             renderPuzzleFrame({
               ctx,
               img: imageRef.current,
               pieces: piecesRef.current,
-              elapsed: elapsedSinceStart,
+              elapsed,
               totalDuration,
               shape,
               movement,
               background,
               particles: [],
-              physicsPieces: physicsPiecesData.size > 0 ? physicsPiecesData : undefined,
+              physicsPieces: physicsPieces.size > 0 ? physicsPieces : undefined,
               narrativeText: showDocumentaryTips ? narrativeText : "",
               channelLogo: logoImgRef.current || undefined,
-              // ✅ فقط فصل آخر اسلایدشو دارد
               completedPuzzleSnapshots: isLastChapter ? completedPuzzleSnapshots : undefined,
             });
           }
 
-          // ✅ Progress فقط قبل از ترنزیشن
+          // Progress
           if (!isTransitioningRef.current) {
-            const progressPercent = (Math.min(elapsedSinceStart, totalDuration) / totalDuration) * 100;
-            onProgress(progressPercent);
+            const prog = (Math.min(elapsed, totalDuration) / totalDuration) * 100;
+            onProgress(prog);
           }
         }
 
-        // ✅ همیشه loop ادامه پیدا کند
         animationRef.current = requestAnimationFrame(loop);
       },
       [
@@ -428,7 +433,7 @@ const PuzzleCanvas = forwardRef<CanvasHandle, PuzzleCanvasProps>(
       ]
     );
 
-    // ─── LOOP LIFECYCLE ───────────────────────────────────────────────
+    // ─── LOOP LIFECYCLE ─────────────────────────────────────────────
     useEffect(() => {
       if (isSolving && isReady) {
         animationRef.current = requestAnimationFrame(loop);
@@ -441,7 +446,7 @@ const PuzzleCanvas = forwardRef<CanvasHandle, PuzzleCanvasProps>(
       };
     }, [isSolving, isReady, loop]);
 
-    // ─── RENDER ───────────────────────────────────────────────────────
+    // ─── RENDER ─────────────────────────────────────────────────────
     return (
       <div className="relative w-full h-full bg-black flex items-center justify-center overflow-hidden">
         <PuzzleOverlay

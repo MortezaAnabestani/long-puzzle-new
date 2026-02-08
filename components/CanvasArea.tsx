@@ -18,11 +18,13 @@ interface CanvasAreaProps {
   channelLogoUrl: string | null;
   onProgress: (p: number) => void;
   onFinished: () => void;
+  onTransitionComplete: () => void; // ✅ NEW: callback بعد از اتمام ترنزیشن
   onToggleSolve: () => void;
-  narrativeText: string; // 🔥 PHASE 1: هر فصل متن خودش
+  narrativeText: string;
   showDocumentaryTips?: boolean;
   progress: number;
   isLastChapter: boolean;
+  isTransitioning: boolean; // ✅ NEW: وضعیت ترنزیشن از App
   completedPuzzleSnapshots?: HTMLImageElement[];
 }
 
@@ -41,11 +43,13 @@ const CanvasArea: React.FC<CanvasAreaProps> = ({
   channelLogoUrl,
   onProgress,
   onFinished,
+  onTransitionComplete,
   onToggleSolve,
   narrativeText,
   showDocumentaryTips = false,
   progress,
   isLastChapter,
+  isTransitioning,
   completedPuzzleSnapshots,
 }) => {
   const phoneFrameRef = useRef<HTMLDivElement>(null);
@@ -113,10 +117,12 @@ const CanvasArea: React.FC<CanvasAreaProps> = ({
                 onProgress={onProgress}
                 isSolving={isColoring}
                 onFinished={onFinished}
+                onTransitionComplete={onTransitionComplete}
                 onToggleSolve={onToggleSolve}
                 narrativeText={narrativeText}
                 showDocumentaryTips={showDocumentaryTips}
                 isLastChapter={isLastChapter}
+                isTransitioning={isTransitioning}
                 completedPuzzleSnapshots={completedPuzzleSnapshots}
               />
             ) : (

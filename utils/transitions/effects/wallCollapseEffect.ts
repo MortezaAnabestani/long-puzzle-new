@@ -76,6 +76,7 @@ export const wallCollapseEffect: TransitionEffect = {
         normalizedY: normalizedY,
         zDepth: 0, // شروع در صفحه Z=0
       };
+      body.pieceId = piece.id;
 
       bodies.push(body);
     });

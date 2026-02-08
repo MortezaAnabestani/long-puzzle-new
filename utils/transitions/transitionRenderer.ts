@@ -1,5 +1,5 @@
 /**
- * 🎨 TRANSITION RENDERER
+ * 🎨 TRANSITION RENDERER - FIXED
  *
  * رندر کردن افکت‌های ترنزیشن با پشتیبانی از فیزیک Matter.js
  * شامل: رندر قطعات، افکت‌های بصری، و fade out نهایی
@@ -76,11 +76,14 @@ const renderVortex = (
     ctx.stroke();
   }
 
-  // رندر قطعات
-  bodies.forEach((body: any, index: number) => {
-    if (!pieces[index]) return;
+  // ✅ رندر قطعات با استفاده از body position
+  bodies.forEach((body: any) => {
+    // ✅ پیدا کردن قطعه مربوطه از روی pieceId ذخیره شده در body
+    const pieceId = body.pieceId;
+    const piece = pieces.find((p: any) => p.id === pieceId);
 
-    const piece = pieces[index];
+    if (!piece || !piece.img) return;
+
     const opacity = Math.max(0, 1 - progress * 1.2); // محو تدریجی
 
     ctx.save();
@@ -88,11 +91,18 @@ const renderVortex = (
     ctx.translate(body.position.x, body.position.y);
     ctx.rotate(body.angle);
 
-    // رسم تصویر قطعه
-    const img = (piece as any).img || (piece as any).imageSrc;
-    if (img) {
-      ctx.drawImage(img, -piece.pw / 2, -piece.ph / 2, piece.pw, piece.ph);
-    }
+    // ✅ رسم قطعه با source coordinates از تصویر اصلی
+    ctx.drawImage(
+      piece.img,
+      piece.sx,
+      piece.sy,
+      piece.sw,
+      piece.sh, // source
+      -piece.pw / 2,
+      -piece.ph / 2,
+      piece.pw,
+      piece.ph // destination
+    );
 
     ctx.restore();
   });
@@ -122,12 +132,14 @@ const renderWreckingBall = (
   ctx.save();
 
   // رندر قطعات
-  bodies.forEach((body: any, index: number) => {
+  bodies.forEach((body: any) => {
     // اگر این توپ است، رندر جداگانه
     if (body === wreckingBall) return;
 
-    if (!pieces[index]) return;
-    const piece = pieces[index];
+    const pieceId = body.pieceId;
+    const piece = pieces.find((p: any) => p.id === pieceId);
+
+    if (!piece || !piece.img) return;
 
     // محاسبه opacity بر اساس سرعت (قطعات سریع‌تر زودتر محو می‌شوند)
     const velocity = Math.sqrt(body.velocity.x ** 2 + body.velocity.y ** 2);
@@ -140,17 +152,23 @@ const renderWreckingBall = (
     ctx.translate(body.position.x, body.position.y);
     ctx.rotate(body.angle);
 
-    const img = (piece as any).img || (piece as any).imageSrc;
-    if (img) {
-      ctx.drawImage(img, -piece.pw / 2, -piece.ph / 2, piece.pw, piece.ph);
-    }
+    ctx.drawImage(
+      piece.img,
+      piece.sx,
+      piece.sy,
+      piece.sw,
+      piece.sh,
+      -piece.pw / 2,
+      -piece.ph / 2,
+      piece.pw,
+      piece.ph
+    );
 
     ctx.restore();
   });
 
   // رندر توپ ویرانگر
   if (wreckingBall && progress < 0.7) {
-    // توپ در 70% اول نمایش داده می‌شود
     ctx.save();
     ctx.globalAlpha = 1 - progress * 1.5;
 
@@ -212,16 +230,18 @@ const renderWallCollapse = (
 
   // مرتب‌سازی بر اساس Z-depth (قطعات دورتر اول رسم شوند)
   const bodiesWithDepth = bodies
-    .map((body: any, index: number) => {
+    .map((body: any) => {
       const pieceData = (body as any)._pieceData || { normalizedY: 0 };
       const zDepth = progress * pieceData.normalizedY * 500; // عمق بر اساس progress
-      return { body, index, zDepth, pieceData };
+      return { body, zDepth, pieceData };
     })
     .sort((a: any, b: any) => b.zDepth - a.zDepth);
 
-  bodiesWithDepth.forEach(({ body, index, zDepth, pieceData }: any) => {
-    if (!pieces[index]) return;
-    const piece = pieces[index];
+  bodiesWithDepth.forEach(({ body, zDepth, pieceData }: any) => {
+    const pieceId = body.pieceId;
+    const piece = pieces.find((p: any) => p.id === pieceId);
+
+    if (!piece || !piece.img) return;
 
     // محاسبه perspective transformation
     const perspective = 800; // فاصله دوربین
@@ -247,10 +267,17 @@ const renderWallCollapse = (
       ctx.shadowOffsetY = zDepth / 30;
     }
 
-    const img = (piece as any).img || (piece as any).imageSrc;
-    if (img) {
-      ctx.drawImage(img, -piece.pw / 2, -piece.ph / 2, piece.pw, piece.ph);
-    }
+    ctx.drawImage(
+      piece.img,
+      piece.sx,
+      piece.sy,
+      piece.sw,
+      piece.sh,
+      -piece.pw / 2,
+      -piece.ph / 2,
+      piece.pw,
+      piece.ph
+    );
 
     ctx.restore();
   });
@@ -318,9 +345,12 @@ const renderUfoAbduction = (
   }
 
   // رندر قطعات
-  bodies.forEach((body: any, index: number) => {
-    if (!pieces[index]) return;
-    const piece = pieces[index];
+  bodies.forEach((body: any) => {
+    const pieceId = body.pieceId;
+    const piece = pieces.find((p: any) => p.id === pieceId);
+
+    if (!piece || !piece.img) return;
+
     const beamData = (body as any)._beamData || { isInBeam: false, pullStrength: 0 };
 
     // قطعات داخل پرتو درخشان‌تر
@@ -346,10 +376,17 @@ const renderUfoAbduction = (
     ctx.translate(body.position.x, body.position.y);
     ctx.rotate(body.angle);
 
-    const img = (piece as any).img || (piece as any).imageSrc;
-    if (img) {
-      ctx.drawImage(img, -piece.pw / 2, -piece.ph / 2, piece.pw, piece.ph);
-    }
+    ctx.drawImage(
+      piece.img,
+      piece.sx,
+      piece.sy,
+      piece.sw,
+      piece.sh,
+      -piece.pw / 2,
+      -piece.ph / 2,
+      piece.pw,
+      piece.ph
+    );
 
     ctx.restore();
   });

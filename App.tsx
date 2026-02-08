@@ -30,18 +30,10 @@ import { playWithFade, pauseWithFade } from "./utils/audioFade";
 import { BackendModeProvider } from "./contexts/BackendModeContext";
 import { TestModeProvider } from "./contexts/TestModeContext";
 
-// ─── TRANSITION DURATIONS (ms) ──────────────────────────────────────
-
-const TRANSITION_DURATIONS: Record<ChapterTransition, number> = {
-  [ChapterTransition.FADE_TEXT]: 2500,
-  [ChapterTransition.PARTICLE_DISSOLVE]: 3000,
-  [ChapterTransition.TIMELINE_PULSE]: 2000,
-};
-
 // ─── APP ─────────────────────────────────────────────────────────────
 
 const AppContent: React.FC = () => {
-  // ─── USER PREFERENCES — فقط long-form فیلدها ──────────────────────
+  // ─── USER PREFERENCES ──────────────────────────────────────────────
   const [preferences, setPreferences] = useState<UserPreferences>({
     genre: ReconstructionGenre.HISTORICAL_RECONSTRUCTION,
     topic: "",
@@ -66,7 +58,10 @@ const AppContent: React.FC = () => {
   const [engagementGifUrl, setEngagementGifUrl] = useState<string | null>(null);
   const [channelLogoUrl, setChannelLogoUrl] = useState<string | null>(null);
 
-  // ─── 🔥 CTA GLOBAL TIMING ───────────────────────────────────────────
+  // ─── CHAPTER INFO OVERLAY ───────────────────────────────────────────
+  const [showChapterInfo, setShowChapterInfo] = useState(false);
+
+  // ─── CTA GLOBAL TIMING ──────────────────────────────────────────────
   const [globalElapsedTime, setGlobalElapsedTime] = useState(0);
   const [showMidCTA, setShowMidCTA] = useState(false);
   const [showFinalCTA, setShowFinalCTA] = useState(false);
@@ -77,8 +72,7 @@ const AppContent: React.FC = () => {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const musicBufferRef = useRef<AudioBuffer | null>(null);
   const canvasHandleRef = useRef<CanvasHandle>(null);
-  const transitionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const completedPuzzleSnapshots = useRef<HTMLImageElement[]>([]); // 🔥 اسلایدشو
+  const completedPuzzleSnapshots = useRef<HTMLImageElement[]>([]);
 
   // ─── CLOUD TRACK ────────────────────────────────────────────────────
   const handleAddCloudTrack = useCallback(
@@ -116,33 +110,28 @@ const AppContent: React.FC = () => {
     musicBufferRef
   );
 
-  // ─── DERIVED: فصل فعلی و imageUrl ───────────────────────────────────
+  // ─── DERIVED STATE ──────────────────────────────────────────────────
   const currentChapter = state.project?.chapters[state.currentChapterIndex] ?? null;
   const currentImageUrl = currentChapter?.imageUrl ?? null;
 
-  // ─── 🔥 PHASE 1: PRELOAD NEXT CHAPTER IMAGE ─────────────────────────
+  // ─── PRELOAD NEXT CHAPTER ───────────────────────────────────────────
   const nextChapter = state.project?.chapters[state.currentChapterIndex + 1] ?? null;
-  const nextImageUrl = nextChapter?.imageUrl ?? null;
-
   useEffect(() => {
-    if (nextImageUrl) {
-      // Preload next chapter image in background
-      const preloadImg = new Image();
-      preloadImg.src = nextImageUrl;
+    if (nextChapter?.imageUrl) {
+      const img = new Image();
+      img.src = nextChapter.imageUrl;
+      console.log(`📥 [App] Preloading chapter ${state.currentChapterIndex + 2} image`);
     }
-  }, [nextImageUrl]);
+  }, [nextChapter?.imageUrl, state.currentChapterIndex]);
 
-  // ─── 🔥 GLOBAL TIMER FOR CTA ────────────────────────────────────────
+  // ─── GLOBAL TIMER ───────────────────────────────────────────────────
   useEffect(() => {
     if (state.isSolving && !state.isTransitioning) {
       const startTime = performance.now();
-
       const updateTimer = () => {
-        const elapsed = performance.now() - startTime;
-        setGlobalElapsedTime(elapsed);
+        setGlobalElapsedTime(performance.now() - startTime);
         globalTimerRef.current = requestAnimationFrame(updateTimer);
       };
-
       globalTimerRef.current = requestAnimationFrame(updateTimer);
     } else {
       if (globalTimerRef.current) {
@@ -150,30 +139,20 @@ const AppContent: React.FC = () => {
         globalTimerRef.current = null;
       }
     }
-
     return () => {
-      if (globalTimerRef.current) {
-        cancelAnimationFrame(globalTimerRef.current);
-      }
+      if (globalTimerRef.current) cancelAnimationFrame(globalTimerRef.current);
     };
   }, [state.isSolving, state.isTransitioning]);
 
-  // ─── 🔥 CTA TIMING LOGIC ────────────────────────────────────────────
+  // ─── CTA TIMING ─────────────────────────────────────────────────────
   useEffect(() => {
     if (!state.project) return;
-
-    const elapsedSeconds = globalElapsedTime / 1000;
-
-    // Mid-CTA: 2:30 - 3:30 (150-210 seconds)
-    const showMid = elapsedSeconds >= 150 && elapsedSeconds <= 210;
-    setShowMidCTA(showMid);
-
-    // Final-CTA: 5:00 - 6:00 (300-360 seconds)
-    const showFinal = elapsedSeconds >= 300 && elapsedSeconds <= 360;
-    setShowFinalCTA(showFinal);
+    const sec = globalElapsedTime / 1000;
+    setShowMidCTA(sec >= 150 && sec <= 210);
+    setShowFinalCTA(sec >= 300 && sec <= 360);
   }, [globalElapsedTime, state.project]);
 
-  // ─── 🔥 CHANNEL LOGO LOADER ─────────────────────────────────────────
+  // ─── CHANNEL LOGO ───────────────────────────────────────────────────
   useEffect(() => {
     if (channelLogoUrl) {
       const img = new Image();
@@ -186,21 +165,21 @@ const AppContent: React.FC = () => {
     }
   }, [channelLogoUrl]);
 
-  // ─── CHAPTER ADVANCE ────────────────────────────────────────────────
-  /**
-   * یک فصل تموم شده.
-   * اگه فصل بعدی هست → transition → فصل بعدی شروع شه
-   * اگه آخرین فصل بود → pause صدا → پایان
-   */
-  const advanceToNextChapter = useCallback(() => {
-    setState((s) => {
-      if (!s.project) return s;
+  // ─── ✅ TRANSITION COMPLETE (کلید اصلی!) ──────────────────────────
+  const handleTransitionComplete = useCallback(() => {
+    console.log(`🎬 [App] handleTransitionComplete called`);
 
-      const chapters = s.project.chapters;
+    setState((s) => {
+      if (!s.project) {
+        console.warn(`⚠️ [App] No project in handleTransitionComplete`);
+        return s;
+      }
+
       const nextIndex = s.currentChapterIndex + 1;
 
-      // ─── آخرین فصل بود → تموم ───────────────────────────────────
-      if (nextIndex >= chapters.length) {
+      // ✅ آخرین فصل بود
+      if (nextIndex >= s.project.chapters.length) {
+        console.log(`🏁 [App] Was last chapter - stopping`);
         if (audioRef.current) pauseWithFade(audioRef.current, { duration: 2000 });
         return {
           ...s,
@@ -211,54 +190,43 @@ const AppContent: React.FC = () => {
           project: {
             ...s.project,
             status: ProjectStatus.COMPLETED,
-            chapters: chapters.map((ch, i) =>
+            chapters: s.project.chapters.map((ch, i) =>
               i === s.currentChapterIndex ? { ...ch, status: ChapterStatus.COMPLETED } : ch
             ),
           },
         };
       }
 
-      // ─── فصل بعدی هست → transition شروع شه ─────────────────────
-      const transitionType = chapters[s.currentChapterIndex].transition;
+      console.log(`✅ [App] Advancing to chapter ${nextIndex + 1}/${s.project.chapters.length}`);
 
-      // فصل فعلی = COMPLETED
-      const updatedChapters = chapters.map((ch, i) =>
-        i === s.currentChapterIndex ? { ...ch, status: ChapterStatus.COMPLETED } : ch
-      );
+      // ✅ نمایش info overlay برای 2 ثانیه
+      setShowChapterInfo(true);
+      setTimeout(() => setShowChapterInfo(false), 2000);
 
-      // بعد از delay، فصل بعدی شروع شه
-      transitionTimerRef.current = setTimeout(() => {
-        setState((inner) => {
-          if (!inner.project) return inner;
-          const nxt = inner.currentChapterIndex + 1;
-
-          return {
-            ...inner,
-            currentChapterIndex: nxt,
-            isTransitioning: false,
-            progress: 0,
-            isSolving: true,
-            project: {
-              ...inner.project,
-              chapters: inner.project.chapters.map((ch, i) =>
-                i === nxt ? { ...ch, status: ChapterStatus.PLAYING } : ch
-              ),
-            },
-          };
-        });
-      }, TRANSITION_DURATIONS[transitionType]);
-
+      // ✅ پیشروی به فصل بعد
       return {
         ...s,
-        isTransitioning: true,
-        project: { ...s.project, chapters: updatedChapters },
+        currentChapterIndex: nextIndex,
+        isTransitioning: false,
+        progress: 0,
+        isSolving: true,
+        project: {
+          ...s.project,
+          chapters: s.project.chapters.map((ch, i) => {
+            if (i === s.currentChapterIndex) return { ...ch, status: ChapterStatus.COMPLETED };
+            if (i === nextIndex) return { ...ch, status: ChapterStatus.PLAYING };
+            return ch;
+          }),
+        },
       };
     });
   }, [setState]);
 
-  // ─── PUZZLE FINISHED (فصل فعلی تموم شد) ────────────────────────────
+  // ─── ✅ PUZZLE FINISHED ─────────────────────────────────────────────
   const handlePuzzleFinished = useCallback(() => {
-    // 🔥 ذخیره snapshot برای اسلایدشو (فقط فصل‌های میانی)
+    console.log(`🏁 [App] handlePuzzleFinished - chapter ${state.currentChapterIndex + 1}`);
+
+    // Snapshot برای slideshow
     if (
       canvasHandleRef.current &&
       state.project &&
@@ -270,15 +238,32 @@ const AppContent: React.FC = () => {
         snapshot.src = canvas.toDataURL("image/png");
         snapshot.onload = () => {
           completedPuzzleSnapshots.current.push(snapshot);
-          console.log(`📸 Snapshot saved: ${completedPuzzleSnapshots.current.length} total`);
+          console.log(`📸 Snapshot ${completedPuzzleSnapshots.current.length} saved`);
         };
       }
     }
 
-    advanceToNextChapter();
-  }, [advanceToNextChapter, state.project, state.currentChapterIndex]);
+    setState((s) => {
+      if (!s.project) return s;
 
-  // ─── START / PAUSE ──────────────────────────────────────────────────
+      const nextIndex = s.currentChapterIndex + 1;
+
+      // ✅ اگر آخرین فصل بود، فقط return
+      if (nextIndex >= s.project.chapters.length) {
+        console.log(`🏁 [App] Last chapter - no transition`);
+        return s;
+      }
+
+      // ✅ شروع transition
+      console.log(`🎬 [App] Starting transition for chapter ${nextIndex + 1}`);
+      return {
+        ...s,
+        isTransitioning: true,
+      };
+    });
+  }, [setState, state.project, state.currentChapterIndex]);
+
+  // ─── START/PAUSE ────────────────────────────────────────────────────
   const handleToggleSolve = useCallback(() => {
     setState((s) => {
       if (!s.project) return s;
@@ -286,7 +271,7 @@ const AppContent: React.FC = () => {
       const nextSolving = !s.isSolving;
 
       if (nextSolving) {
-        // ─── شروع پخش ─────────────────────────────────────────────
+        console.log(`▶️ [App] Play - chapter ${s.currentChapterIndex + 1}`);
         if (audioRef.current) {
           audioRef.current.currentTime = 0;
           playWithFade(audioRef.current, { duration: 2000, targetVolume: 1.0 });
@@ -295,7 +280,6 @@ const AppContent: React.FC = () => {
           ...s,
           isSolving: true,
           isRecording: true,
-          currentChapterIndex: s.currentChapterIndex,
           progress: 0,
           pipelineStep: "RECORDING",
           project: {
@@ -307,32 +291,24 @@ const AppContent: React.FC = () => {
           },
         };
       } else {
-        // ─── pause ─────────────────────────────────────────────────
+        console.log(`⏸️ [App] Pause`);
         if (audioRef.current) pauseWithFade(audioRef.current, { duration: 1500 });
-        if (transitionTimerRef.current) clearTimeout(transitionTimerRef.current);
         return { ...s, isSolving: false, isRecording: false, pipelineStep: "IDLE" };
       }
     });
   }, [setState]);
 
-  // ─── FULL PACKAGE TOGGLE ────────────────────────────────────────────
+  // ─── FULL PACKAGE ───────────────────────────────────────────────────
   const handleToggleFullPackage = useCallback(() => {
     setState((prev) => ({ ...prev, isFullPackage: !prev.isFullPackage }));
   }, [setState]);
-
-  // ─── CLEANUP ────────────────────────────────────────────────────────
-  useEffect(() => {
-    return () => {
-      if (transitionTimerRef.current) clearTimeout(transitionTimerRef.current);
-    };
-  }, []);
 
   // ─── RENDER ─────────────────────────────────────────────────────────
   return (
     <div className="flex h-screen bg-[#020205] text-slate-100 overflow-hidden font-['Inter'] relative">
       <audio ref={audioRef} loop crossOrigin="anonymous" style={{ display: "none" }} />
 
-      {/* ── Auto-mode production progress ────────────────────────── */}
+      {/* Production Progress */}
       {state.isAutoMode && state.productionSteps?.length > 0 && (
         <ProductionProgress
           currentVideo={state.currentQueueIdx + 1}
@@ -341,7 +317,7 @@ const AppContent: React.FC = () => {
         />
       )}
 
-      {/* ── CHAPTER PROGRESS BAR (فوق صفحه) ──────────────────────── */}
+      {/* Chapter Progress Bar */}
       {state.project?.status === ProjectStatus.PLAYING && (
         <div className="fixed top-0 left-0 right-0 z-50 h-1 bg-[#0a0a12]">
           <div
@@ -355,29 +331,30 @@ const AppContent: React.FC = () => {
         </div>
       )}
 
-      {/* ── CHAPTER TRANSITION OVERLAY ───────────────────────────── */}
-      {state.isTransitioning &&
+      {/* ✅ TRANSITION OVERLAY - نمایش بعد از ترنزیشن */}
+      {/* این overlay فقط برای نمایش اطلاعات فصل بعدیه، نه خود ترنزیشن */}
+      {showChapterInfo &&
         state.project &&
         (() => {
-          const nextIdx = state.currentChapterIndex + 1;
-          const next = state.project.chapters[nextIdx];
-          if (!next) return null;
+          const current = state.project.chapters[state.currentChapterIndex];
+          if (!current) return null;
+
           return (
-            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-sm">
-              <div className="text-center space-y-4">
+            <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in pointer-events-none">
+              <div className="text-center space-y-4 px-8 animate-slide-up">
                 <p className="text-xs uppercase tracking-[0.35em] text-purple-400 font-semibold">
-                  فصل {nextIdx + 1} از {state.project.chapters.length}
+                  فصل {state.currentChapterIndex + 1} از {state.project.chapters.length}
                 </p>
-                <h2 className="text-3xl font-bold text-white drop-shadow-lg">{next.title}</h2>
+                <h2 className="text-3xl font-bold text-white drop-shadow-lg">{current.title}</h2>
                 <p className="text-sm text-slate-400 italic max-w-md mx-auto leading-relaxed">
-                  {next.narrativeText.substring(0, 90)}…
+                  {current.narrativeText.substring(0, 90)}…
                 </p>
               </div>
             </div>
           );
         })()}
 
-      {/* ── RECORDING SYSTEM ──────────────────────────────────────── */}
+      {/* Recording System */}
       <RecordingSystem
         isRecording={state.isRecording}
         getCanvas={() => canvasHandleRef.current?.getCanvas() || null}
@@ -388,7 +365,7 @@ const AppContent: React.FC = () => {
         onRecordingComplete={setLastVideoBlob}
       />
 
-      {/* ── SIDEBAR ───────────────────────────────────────────────── */}
+      {/* Sidebar */}
       <aside className="w-[420px] z-40 h-full glass-panel flex flex-col shrink-0">
         <Sidebar
           preferences={preferences}
@@ -433,13 +410,12 @@ const AppContent: React.FC = () => {
           }}
           onGifChange={setEngagementGifUrl}
           onChannelLogoChange={setChannelLogoUrl}
-          // ── long-form props ─────────────────────────────────────
           project={state.project}
           currentChapterIndex={state.currentChapterIndex}
         />
       </aside>
 
-      {/* ── MAIN ──────────────────────────────────────────────────── */}
+      {/* Main Content */}
       <main className="flex-1 overflow-y-auto custom-scrollbar bg-[#020205] relative z-10 flex flex-col">
         <Header
           progress={state.progress}
@@ -451,13 +427,13 @@ const AppContent: React.FC = () => {
           totalChapters={state.project?.chapters.length ?? 0}
         />
 
-        {/* ── CANVAS (پازل فصل فعلی) ─────────────────────────────── */}
+        {/* Canvas */}
         <section className="h-[85vh] w-full relative bg-black shrink-0">
           <CanvasArea
             canvasHandleRef={canvasHandleRef}
             imageUrl={currentImageUrl}
             durationMinutes={currentChapter ? currentChapter.durationSeconds / 60 : 0.75}
-            isColoring={state.isSolving && !state.isTransitioning}
+            isColoring={state.isSolving}
             pieceCount={currentChapter?.puzzleConfig.pieceCount ?? preferences.defaultPieceCount}
             shape={currentChapter?.puzzleConfig.shape ?? preferences.defaultShape}
             material={currentChapter?.puzzleConfig.material ?? preferences.defaultMaterial}
@@ -468,6 +444,7 @@ const AppContent: React.FC = () => {
             channelLogoUrl={channelLogoUrl}
             onProgress={(p) => setState((prev) => ({ ...prev, progress: p }))}
             onFinished={handlePuzzleFinished}
+            onTransitionComplete={handleTransitionComplete}
             onToggleSolve={handleToggleSolve}
             narrativeText={currentChapter?.narrativeText ?? ""}
             showDocumentaryTips={preferences.showDocumentaryTips}
@@ -475,11 +452,12 @@ const AppContent: React.FC = () => {
             isLastChapter={
               state.project ? state.currentChapterIndex === state.project.chapters.length - 1 : false
             }
+            isTransitioning={state.isTransitioning}
             completedPuzzleSnapshots={completedPuzzleSnapshots.current}
           />
         </section>
 
-        {/* ── BOTTOM: THUMBNAIL + METADATA ─────────────────────────── */}
+        {/* Thumbnail + Metadata */}
         <div className="w-full bg-[#050508] border-t border-white/5 pb-32">
           {(currentImageUrl || metadata || isMetadataLoading) && (
             <div className="max-w-7xl mx-auto px-8 py-20 space-y-20">
@@ -502,9 +480,8 @@ const AppContent: React.FC = () => {
         />
       </main>
 
-      {/* ── 🔥 GLOBAL CTAs ────────────────────────────────────────── */}
+      {/* CTAs */}
       {showMidCTA && <EngagementCTA isVisible={true} variant="mid" channelLogo={logoImgRef.current} />}
-
       {showFinalCTA && <EngagementCTA isVisible={true} variant="final" channelLogo={logoImgRef.current} />}
     </div>
   );

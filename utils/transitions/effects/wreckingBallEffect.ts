@@ -52,6 +52,7 @@ export const wreckingBallEffect: TransitionEffect = {
           },
         }
       );
+      body.pieceId = piece.id;
 
       bodies.push(body);
     });

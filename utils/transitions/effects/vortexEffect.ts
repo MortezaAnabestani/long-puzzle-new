@@ -85,6 +85,7 @@ export const vortexEffect: TransitionEffect = {
       // چرخش سریع هر قطعه دور خودش
       const rotationSpeed = (Math.random() - 0.5) * 1.2;
       Matter.Body.setAngularVelocity(body, rotationSpeed);
+      body.pieceId = piece.id;
 
       bodies.push(body);
     });

@@ -101,6 +101,7 @@ export const ufoAbductionEffect: TransitionEffect = {
         distanceFromCenter: horizontalDist,
         pullStrength: pullStrength,
       };
+      body.pieceId = piece.id;
 
       bodies.push(body);
     });
