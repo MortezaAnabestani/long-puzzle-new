@@ -6,16 +6,10 @@ import {
   DEFAULT_TRANSITION_CONFIG,
 } from "./transitionTypes";
 
-import { fadeToBlackEffect } from "./effects/windEffect";
-import { pageTurnEffect } from "./effects/collapseEffect";
-import { pixelateDissolveEffect } from "./effects/explosionEffect";
-import { wipeTransitionEffect } from "./effects/spiralEffect";
-import { zoomOutEffect } from "./effects/waveEffect";
-import { gravityEffect } from "./effects/gravityEffect";
-import { magnetEffect } from "./effects/magnetEffect";
-import { tornadoEffect } from "./effects/tornadoEffect";
-import { implosionEffect } from "./effects/implosionEffect";
-import { scatterEffect } from "./effects/scatterEffect";
+import { vortexEffect } from "./effects/vortexEffect";
+import { wreckingBallEffect } from "./effects/wreckingBallEffect";
+import { wallCollapseEffect } from "./effects/wallCollapseEffect";
+import { ufoAbductionEffect } from "./effects/ufoAbductionEffect";
 
 class TransitionEngine {
   private effects: Map<TransitionType, TransitionEffect>;
@@ -23,16 +17,16 @@ class TransitionEngine {
   private currentEngine: any = null;
   private transitionStartTime: number = 0;
   private transitionType: string | null = null;
+  private animationFrameId: number | null = null;
+  private lastUpdateTime: number = 0;
 
   constructor() {
     this.config = { ...DEFAULT_TRANSITION_CONFIG };
     this.effects = new Map([
-      [TransitionType.WIND, fadeToBlackEffect],
-      [TransitionType.COLLAPSE, pageTurnEffect],
-      [TransitionType.EXPLOSION, pixelateDissolveEffect],
-      [TransitionType.SPIRAL, wipeTransitionEffect],
-      [TransitionType.WAVE, zoomOutEffect],
-      // Removed physics-heavy effects for cleaner transitions
+      [TransitionType.TORNADO, vortexEffect],
+      [TransitionType.EXPLOSION, wreckingBallEffect],
+      [TransitionType.COLLAPSE, wallCollapseEffect],
+      [TransitionType.MAGNET, ufoAbductionEffect],
     ]);
   }
 
@@ -53,7 +47,7 @@ class TransitionEngine {
   }
 
   /**
-   * Apply transition with full timing control
+   * Apply transition with IMMEDIATE start (no delay)
    * Returns: cleanup function to call when component unmounts
    */
   applyTransition(
@@ -67,41 +61,83 @@ class TransitionEngine {
     const selectedEffect = effect || this.getRandomEffect();
     this.currentEngine = engine;
 
-    let timeoutId: number | null = null;
     let completionTimeoutId: number | null = null;
 
-    // Wait 3 seconds after puzzle completion
-    timeoutId = window.setTimeout(() => {
-      console.log(`🎬 [Transition] Starting ${selectedEffect.type} effect`);
+    console.log(`🎬 [Transition] Starting ${selectedEffect.type} effect IMMEDIATELY`);
 
-      // Apply the effect (stores metadata in engine)
-      selectedEffect.apply(pieces, engine, canvasWidth, canvasHeight);
+    // ✅ بدون تأخیر! بلافاصله شروع می‌شود
+    selectedEffect.apply(pieces, engine, canvasWidth, canvasHeight);
 
-      // Store transition info for rendering
-      if (engine) {
-        this.transitionStartTime = Date.now();
-        this.transitionType = (engine as any)._transitionType || null;
+    // Store transition info for rendering
+    if (engine) {
+      this.transitionStartTime = Date.now();
+      this.transitionType = (engine as any)._transitionType || null;
+
+      // شروع به‌روزرسانی فیزیک اگر فعال باشد
+      if ((engine as any)._physicsEnabled) {
+        this.startPhysicsUpdate();
       }
+    }
 
-      // Complete after transition duration
-      completionTimeoutId = window.setTimeout(() => {
-        console.log(`✅ [Transition] ${selectedEffect.type} complete`);
-        if (onComplete) onComplete();
-      }, this.config.transitionDuration);
-    }, this.config.waitTime);
+    // Complete after transition duration
+    completionTimeoutId = window.setTimeout(() => {
+      console.log(`✅ [Transition] ${selectedEffect.type} complete`);
+      this.stopPhysicsUpdate();
+      if (onComplete) onComplete();
+    }, this.config.transitionDuration);
 
     // Cleanup function
     return () => {
-      if (timeoutId) clearTimeout(timeoutId);
       if (completionTimeoutId) clearTimeout(completionTimeoutId);
       this.cleanup();
     };
   }
 
   /**
+   * Start physics update loop
+   */
+  private startPhysicsUpdate(): void {
+    if (!this.currentEngine || typeof window === "undefined") return;
+
+    const Matter = (window as any).Matter;
+    if (!Matter) return;
+
+    this.lastUpdateTime = Date.now();
+
+    const updateLoop = () => {
+      if (!this.currentEngine || !(this.currentEngine as any)._physicsEnabled) {
+        this.stopPhysicsUpdate();
+        return;
+      }
+
+      const currentTime = Date.now();
+      const deltaTime = currentTime - this.lastUpdateTime;
+      this.lastUpdateTime = currentTime;
+
+      // Update Matter.js engine
+      Matter.Engine.update(this.currentEngine, deltaTime);
+
+      this.animationFrameId = requestAnimationFrame(updateLoop);
+    };
+
+    this.animationFrameId = requestAnimationFrame(updateLoop);
+  }
+
+  /**
+   * Stop physics update loop
+   */
+  private stopPhysicsUpdate(): void {
+    if (this.animationFrameId !== null) {
+      cancelAnimationFrame(this.animationFrameId);
+      this.animationFrameId = null;
+    }
+  }
+
+  /**
    * Cleanup physics engine
    */
   cleanup(): void {
+    this.stopPhysicsUpdate();
     this.currentEngine = null;
     this.transitionStartTime = 0;
     this.transitionType = null;
@@ -124,17 +160,40 @@ class TransitionEngine {
   }
 
   /**
-   * Update physics engine (not needed for new transitions, kept for compatibility)
+   * Get physics data for rendering
    */
-  update(deltaTime: number = 16.666): void {
-    // New transitions don't use physics update
+  getPhysicsData(): Map<
+    number,
+    { x: number; y: number; angle: number; scaleX?: number; scaleY?: number; opacity?: number }
+  > {
+    const dataMap = new Map();
+
+    if (!this.currentEngine || typeof window === "undefined") return dataMap;
+
+    const Matter = (window as any).Matter;
+    if (!Matter) return dataMap;
+
+    const bodies = Matter.Composite.allBodies(this.currentEngine.world);
+
+    bodies.forEach((body: any, index: number) => {
+      // نادیده گرفتن توپ ویرانگر (شناسه خاصی ندارد)
+      if (body.circleRadius) return;
+
+      dataMap.set(index, {
+        x: body.position.x,
+        y: body.position.y,
+        angle: body.angle,
+      });
+    });
+
+    return dataMap;
   }
 
   /**
-   * Get physics data (returns empty for new transitions)
+   * Get current engine (for custom rendering)
    */
-  getPhysicsData(): Map<number, { x: number; y: number; angle: number }> {
-    return new Map();
+  getCurrentEngine(): any {
+    return this.currentEngine;
   }
 
   /**

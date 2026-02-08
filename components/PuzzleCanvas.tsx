@@ -90,8 +90,8 @@ const PuzzleCanvas = forwardRef<CanvasHandle, PuzzleCanvasProps>(
     const lastIntervalRef = useRef<number>(-1);
     const snapTimeoutRef = useRef<number | null>(null);
 
-    // ─── فصل میانی: وقتی progress 100% شد، فوراً onFinished صدا میشه
-    const midChapterFinishedRef = useRef(false);
+    // ─── فصل میانی: فلگ برای اینکه ترنزیشن شروع شده
+    const transitionStartedRef = useRef(false);
 
     // ─── Warm-up flag ─────────────────────────────────────────────────
     const warmupCompleteRef = useRef(false);
@@ -115,10 +115,13 @@ const PuzzleCanvas = forwardRef<CanvasHandle, PuzzleCanvasProps>(
       }
     }, [channelLogoUrl]);
 
-    // ─── PHYSICS INIT (فقط آخرین فصل استفاده میکنه) ──────────────────
+    // ─── PHYSICS INIT (برای هر دو نوع فصل نیاز هست) ───────────────────
     const initPhysics = useCallback(() => {
       const Matter = getMatter();
-      if (!Matter) return;
+      if (!Matter) {
+        console.warn("⚠️ Matter.js not loaded!");
+        return;
+      }
 
       if (engineRef.current) {
         Matter.World.clear(engineRef.current.world, false);
@@ -126,14 +129,23 @@ const PuzzleCanvas = forwardRef<CanvasHandle, PuzzleCanvasProps>(
         engineRef.current = null;
       }
 
-      const engine = Matter.Engine.create();
-      engine.world.gravity.y = 2.0;
-      const ground = Matter.Bodies.rectangle(vWidth / 2, vHeight + 500, vWidth * 10, 1000, {
-        isStatic: true,
+      // ساخت engine ساده (بدون gravity برای فصل میانی)
+      const engine = Matter.Engine.create({
+        gravity: { x: 0, y: 0 },
       });
-      Matter.World.add(engine.world, [ground]);
+
+      // فقط برای فصل آخر ground اضافه می‌کنیم
+      if (isLastChapter) {
+        engine.world.gravity.y = 2.0;
+        const ground = Matter.Bodies.rectangle(vWidth / 2, vHeight + 500, vWidth * 10, 1000, {
+          isStatic: true,
+        });
+        Matter.World.add(engine.world, [ground]);
+      }
+
       engineRef.current = engine;
-    }, [getMatter, vHeight]);
+      console.log(`✅ Physics engine initialized (isLastChapter: ${isLastChapter})`);
+    }, [getMatter, vWidth, vHeight, isLastChapter]);
 
     // ─── PHYSICS ACTIVATE (فقط آخرین فصل) ────────────────────────────
     const activatePhysics = useCallback(() => {
@@ -176,6 +188,8 @@ const PuzzleCanvas = forwardRef<CanvasHandle, PuzzleCanvasProps>(
     const cleanupChapter = useCallback(() => {
       const Matter = getMatter();
 
+      console.log("🧹 Cleaning up chapter...");
+
       clearAllTrails();
 
       // ✅ CLEANUP TRANSITION SYSTEM
@@ -183,8 +197,11 @@ const PuzzleCanvas = forwardRef<CanvasHandle, PuzzleCanvasProps>(
         transitionCleanupRef.current();
         transitionCleanupRef.current = null;
       }
+      transitionEngine.cleanup();
       isTransitioningRef.current = false;
+      transitionStartedRef.current = false;
 
+      // ✅ CLEANUP PHYSICS ENGINE
       if (engineRef.current && Matter) {
         Matter.World.clear(engineRef.current.world, false);
         Matter.Engine.clear(engineRef.current);
@@ -213,21 +230,23 @@ const PuzzleCanvas = forwardRef<CanvasHandle, PuzzleCanvasProps>(
       wavePlayedRef.current = false;
       destructionPlayedRef.current = false;
       lastIntervalRef.current = -1;
-      midChapterFinishedRef.current = false;
+      transitionStartedRef.current = false;
 
       const img = new Image();
       img.crossOrigin = "anonymous";
       img.onload = async () => {
         await createPieces(img, pieceCount, shape, material, (p) => setBuildProgress(Math.floor(p * 100)));
         setIsReady(true);
-        if (isLastChapter) initPhysics();
+
+        // ✅ همیشه engine را initialize می‌کنیم (برای transition و physics)
+        initPhysics();
       };
       img.src = imageUrl;
 
       return () => {
         cleanupChapter();
       };
-    }, [imageUrl, pieceCount, shape, material, createPieces, initPhysics, isLastChapter, cleanupChapter]);
+    }, [imageUrl, pieceCount, shape, material, createPieces, initPhysics, cleanupChapter]);
 
     // ─── WARM-UP PHASE ────────────────────────────────────────────────
     useEffect(() => {
@@ -253,7 +272,7 @@ const PuzzleCanvas = forwardRef<CanvasHandle, PuzzleCanvasProps>(
         const elapsedSinceStart = now - startTimeRef.current;
 
         // ─── MOVE + SNAP صدا (هر فصل) ────────────────────────────────
-        if (elapsedSinceStart < totalDuration) {
+        if (elapsedSinceStart < totalDuration && !isTransitioningRef.current) {
           const intervalMs = 4000;
           const currentInterval = Math.floor(elapsedSinceStart / intervalMs);
           if (currentInterval > lastIntervalRef.current) {
@@ -266,25 +285,17 @@ const PuzzleCanvas = forwardRef<CanvasHandle, PuzzleCanvasProps>(
           }
         }
 
-        // ─── 🎬 فصل میانی: ترنزیشن حرفه‌ای ────────────────────────────
+        // ─── 🎬 فصل میانی: ترنزیشن حرفه‌ای بدون تأخیر ──────────────────
         if (!isLastChapter) {
-          if (elapsedSinceStart >= totalDuration && !midChapterFinishedRef.current) {
-            midChapterFinishedRef.current = true;
+          // ✅ بلافاصله پس از رسیدن به 100% ترنزیشن شروع می‌شود
+          if (elapsedSinceStart >= totalDuration && !transitionStartedRef.current) {
+            transitionStartedRef.current = true;
+            isTransitioningRef.current = true;
             onProgress(100);
 
-            if (!isTransitioningRef.current) {
-              isTransitioningRef.current = true;
+            console.log("🎬 [PuzzleCanvas] Starting transition immediately...");
 
-              console.log("🎬 [PuzzleCanvas] Starting professional transition...");
-
-              // Initialize engine for metadata storage
-              if (!engineRef.current) {
-                const Matter = getMatter();
-                if (Matter) {
-                  engineRef.current = Matter.Engine.create();
-                }
-              }
-
+            if (engineRef.current) {
               const randomEffect = transitionEngine.getRandomEffect();
 
               transitionCleanupRef.current = transitionEngine.applyTransition(
@@ -294,13 +305,12 @@ const PuzzleCanvas = forwardRef<CanvasHandle, PuzzleCanvasProps>(
                 vHeight,
                 randomEffect,
                 () => {
-                  console.log("✅ [PuzzleCanvas] Transition complete");
+                  console.log("✅ [PuzzleCanvas] Transition complete - loading next puzzle");
                   isTransitioningRef.current = false;
                   onFinished();
                 }
               );
             }
-            return;
           }
         }
 
@@ -336,6 +346,7 @@ const PuzzleCanvas = forwardRef<CanvasHandle, PuzzleCanvasProps>(
           transitionProgress = transitionEngine.getTransitionProgress();
           transitionType = transitionEngine.getTransitionType();
         } else if (isPhysicsActiveRef.current && engineRef.current && Matter) {
+          // Physics فقط برای فصل آخر
           Matter.Engine.update(engineRef.current, 16.666);
           bodiesRef.current.forEach((body: any, id: number) => {
             physicsPiecesData.set(id, {
@@ -349,32 +360,51 @@ const PuzzleCanvas = forwardRef<CanvasHandle, PuzzleCanvasProps>(
         // ─── DRAW ─────────────────────────────────────────────────────
         const ctx = canvasRef.current?.getContext("2d", { alpha: false });
         if (ctx) {
-          renderPuzzleFrame({
-            ctx,
-            img: imageRef.current,
-            pieces: piecesRef.current,
-            elapsed: elapsedSinceStart,
-            totalDuration,
-            shape,
-            movement,
-            background,
-            particles: [],
-            physicsPieces: physicsPiecesData.size > 0 ? physicsPiecesData : undefined,
-            narrativeText: showDocumentaryTips ? narrativeText : "",
-            channelLogo: logoImgRef.current || undefined,
-            // ✅ FIX: فقط در آخرین فصل اسلایدشو نمایش بده
-            completedPuzzleSnapshots: isLastChapter ? completedPuzzleSnapshots : undefined,
-          });
+          // ✅ اگر در حال ترنزیشن: فقط رندر ترنزیشن
+          if (isTransitioningRef.current && transitionType && transitionProgress < 1) {
+            // پس‌زمینه مشکی
+            ctx.fillStyle = "#000000";
+            ctx.fillRect(0, 0, vWidth, vHeight);
 
-          // ✅ رندر ترنزیشن روی پازل
-          if (transitionType && transitionProgress < 1) {
-            renderTransition(ctx, transitionType, transitionProgress, vWidth, vHeight);
+            // رندر ترنزیشن
+            renderTransition(
+              ctx,
+              transitionType,
+              transitionProgress,
+              vWidth,
+              vHeight,
+              engineRef.current,
+              piecesRef.current
+            );
+          } else if (!isTransitioningRef.current) {
+            // ✅ رندر عادی پازل (فقط وقتی ترنزیشن فعال نیست)
+            renderPuzzleFrame({
+              ctx,
+              img: imageRef.current,
+              pieces: piecesRef.current,
+              elapsed: elapsedSinceStart,
+              totalDuration,
+              shape,
+              movement,
+              background,
+              particles: [],
+              physicsPieces: physicsPiecesData.size > 0 ? physicsPiecesData : undefined,
+              narrativeText: showDocumentaryTips ? narrativeText : "",
+              channelLogo: logoImgRef.current || undefined,
+              // ✅ فقط فصل آخر اسلایدشو دارد
+              completedPuzzleSnapshots: isLastChapter ? completedPuzzleSnapshots : undefined,
+            });
           }
 
-          const progressPercent = (Math.min(elapsedSinceStart, totalDuration) / totalDuration) * 100;
-          onProgress(progressPercent);
-          animationRef.current = requestAnimationFrame(loop);
+          // ✅ Progress فقط قبل از ترنزیشن
+          if (!isTransitioningRef.current) {
+            const progressPercent = (Math.min(elapsedSinceStart, totalDuration) / totalDuration) * 100;
+            onProgress(progressPercent);
+          }
         }
+
+        // ✅ همیشه loop ادامه پیدا کند
+        animationRef.current = requestAnimationFrame(loop);
       },
       [
         isSolving,

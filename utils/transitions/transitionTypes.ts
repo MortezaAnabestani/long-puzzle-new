@@ -37,7 +37,7 @@ export interface TransitionConfig {
 }
 
 export const DEFAULT_TRANSITION_CONFIG: TransitionConfig = {
-  waitTime: 3000,
-  transitionDuration: 4000,
+  waitTime: 0, // ✅ بدون تأخیر! بلافاصله شروع می‌شود
+  transitionDuration: 4000, // 4 ثانیه ترنزیشن
   fadeOutDuration: 500,
 };
