@@ -22,15 +22,15 @@ export interface TestProject {
 // در production باید این URLها رو با عکس‌های واقعی جایگزین کنید
 
 const SAMPLE_IMAGES = [
-  "https://picsum.photos/seed/doc1/1080/1920",
-  "https://picsum.photos/seed/doc2/1080/1920",
-  "https://picsum.photos/seed/doc3/1080/1920",
-  "https://picsum.photos/seed/doc4/1080/1920",
-  "https://picsum.photos/seed/doc5/1080/1920",
-  "https://picsum.photos/seed/doc6/1080/1920",
-  "https://picsum.photos/seed/doc7/1080/1920",
-  "https://picsum.photos/seed/doc8/1080/1920",
-  "https://picsum.photos/seed/doc9/1080/1920",
+  "https://picsum.photos/seed/doc1/1920/1080",
+  "https://picsum.photos/seed/doc2/1920/1080",
+  "https://picsum.photos/seed/doc3/1920/1080",
+  "https://picsum.photos/seed/doc4/1920/1080",
+  "https://picsum.photos/seed/doc5/1920/1080",
+  "https://picsum.photos/seed/doc6/1920/1080",
+  "https://picsum.photos/seed/doc7/1920/1080",
+  "https://picsum.photos/seed/doc8/1920/1080",
+  "https://picsum.photos/seed/doc9/1920/1080",
 ];
 
 // ─── TEST PROJECTS ────────────────────────────────────────────────────

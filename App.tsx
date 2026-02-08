@@ -18,6 +18,7 @@ import {
 import { useProductionPipeline } from "./hooks/useProductionPipeline";
 import Sidebar from "./components/Sidebar";
 import CanvasArea from "./components/CanvasArea";
+import CanvasAreaGrid from "./components/CanvasAreaGrid";
 import Header from "./components/Header";
 import ProductionProgress from "./components/ProductionProgress";
 import MetadataStudio from "./components/engagement/MetadataStudio";
@@ -86,7 +87,7 @@ const AppContent: React.FC = () => {
       setMusicTracks((prev) => [...prev, newTrack]);
       setSelectedTrackId(newTrack.id);
     },
-    []
+    [],
   );
 
   // ─── PIPELINE HOOK ──────────────────────────────────────────────────
@@ -107,7 +108,7 @@ const AppContent: React.FC = () => {
     setActiveTrackName,
     handleAddCloudTrack,
     audioRef,
-    musicBufferRef
+    musicBufferRef,
   );
 
   // ─── DERIVED STATE ──────────────────────────────────────────────────
@@ -191,7 +192,7 @@ const AppContent: React.FC = () => {
             ...s.project,
             status: ProjectStatus.COMPLETED,
             chapters: s.project.chapters.map((ch, i) =>
-              i === s.currentChapterIndex ? { ...ch, status: ChapterStatus.COMPLETED } : ch
+              i === s.currentChapterIndex ? { ...ch, status: ChapterStatus.COMPLETED } : ch,
             ),
           },
         };
@@ -286,7 +287,7 @@ const AppContent: React.FC = () => {
             ...s.project,
             status: ProjectStatus.PLAYING,
             chapters: s.project.chapters.map((ch, i) =>
-              i === s.currentChapterIndex ? { ...ch, status: ChapterStatus.PLAYING } : ch
+              i === s.currentChapterIndex ? { ...ch, status: ChapterStatus.PLAYING } : ch,
             ),
           },
         };
@@ -429,32 +430,53 @@ const AppContent: React.FC = () => {
 
         {/* Canvas */}
         <section className="h-[85vh] w-full relative bg-black shrink-0">
-          <CanvasArea
-            canvasHandleRef={canvasHandleRef}
-            imageUrl={currentImageUrl}
-            durationMinutes={currentChapter ? currentChapter.durationSeconds / 60 : 0.75}
-            isColoring={state.isSolving}
-            pieceCount={currentChapter?.puzzleConfig.pieceCount ?? preferences.defaultPieceCount}
-            shape={currentChapter?.puzzleConfig.shape ?? preferences.defaultShape}
-            material={currentChapter?.puzzleConfig.material ?? preferences.defaultMaterial}
-            movement={currentChapter?.puzzleConfig.movement ?? preferences.defaultMovement}
-            background={preferences.background}
-            topicCategory={state.project?.topic}
-            engagementGifUrl={engagementGifUrl}
-            channelLogoUrl={channelLogoUrl}
-            onProgress={(p) => setState((prev) => ({ ...prev, progress: p }))}
-            onFinished={handlePuzzleFinished}
-            onTransitionComplete={handleTransitionComplete}
-            onToggleSolve={handleToggleSolve}
-            narrativeText={currentChapter?.narrativeText ?? ""}
-            showDocumentaryTips={preferences.showDocumentaryTips}
-            progress={state.progress}
-            isLastChapter={
-              state.project ? state.currentChapterIndex === state.project.chapters.length - 1 : false
-            }
-            isTransitioning={state.isTransitioning}
-            completedPuzzleSnapshots={completedPuzzleSnapshots.current}
-          />
+          {/* ✅ GRID MODE 3×3 */}
+          {state.project && state.project.chapters.length === 9 ? (
+            <CanvasAreaGrid
+              canvasHandleRef={canvasHandleRef}
+              chapters={state.project.chapters}
+              durationPerChapterSeconds={45}
+              isColoring={state.isSolving}
+              pieceCount={preferences.defaultPieceCount}
+              shape={preferences.defaultShape}
+              material={preferences.defaultMaterial}
+              movement={preferences.defaultMovement}
+              background={preferences.background}
+              topicCategory={state.project?.topic}
+              channelLogoUrl={channelLogoUrl}
+              onProgress={(p) => setState((prev) => ({ ...prev, progress: p }))}
+              onFinished={handlePuzzleFinished}
+              showDocumentaryTips={preferences.showDocumentaryTips}
+              progress={state.progress}
+            />
+          ) : (
+            <CanvasArea
+              canvasHandleRef={canvasHandleRef}
+              imageUrl={currentImageUrl}
+              durationMinutes={currentChapter ? currentChapter.durationSeconds / 60 : 0.75}
+              isColoring={state.isSolving}
+              pieceCount={currentChapter?.puzzleConfig.pieceCount ?? preferences.defaultPieceCount}
+              shape={currentChapter?.puzzleConfig.shape ?? preferences.defaultShape}
+              material={currentChapter?.puzzleConfig.material ?? preferences.defaultMaterial}
+              movement={currentChapter?.puzzleConfig.movement ?? preferences.defaultMovement}
+              background={preferences.background}
+              topicCategory={state.project?.topic}
+              engagementGifUrl={engagementGifUrl}
+              channelLogoUrl={channelLogoUrl}
+              onProgress={(p) => setState((prev) => ({ ...prev, progress: p }))}
+              onFinished={handlePuzzleFinished}
+              onTransitionComplete={handleTransitionComplete}
+              onToggleSolve={handleToggleSolve}
+              narrativeText={currentChapter?.narrativeText ?? ""}
+              showDocumentaryTips={preferences.showDocumentaryTips}
+              progress={state.progress}
+              isLastChapter={
+                state.project ? state.currentChapterIndex === state.project.chapters.length - 1 : false
+              }
+              isTransitioning={state.isTransitioning}
+              completedPuzzleSnapshots={completedPuzzleSnapshots.current}
+            />
+          )}
         </section>
 
         {/* Thumbnail + Metadata */}
