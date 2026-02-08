@@ -6,36 +6,33 @@ import {
   DEFAULT_TRANSITION_CONFIG,
 } from "./transitionTypes";
 
-import { windEffect } from "./effects/windEffect";
-import { collapseEffect } from "./effects/collapseEffect";
-import { explosionEffect } from "./effects/explosionEffect";
-import { spiralEffect } from "./effects/spiralEffect";
-import { waveEffect } from "./effects/waveEffect";
+import { fadeToBlackEffect } from "./effects/windEffect";
+import { pageTurnEffect } from "./effects/collapseEffect";
+import { pixelateDissolveEffect } from "./effects/explosionEffect";
+import { wipeTransitionEffect } from "./effects/spiralEffect";
+import { zoomOutEffect } from "./effects/waveEffect";
 import { gravityEffect } from "./effects/gravityEffect";
 import { magnetEffect } from "./effects/magnetEffect";
-import { tornadoEffect } from "./effects/tornadorEffect";
-import { implosionEffect } from "./effects/implodeEffect";
+import { tornadoEffect } from "./effects/tornadoEffect";
+import { implosionEffect } from "./effects/implosionEffect";
 import { scatterEffect } from "./effects/scatterEffect";
 
 class TransitionEngine {
   private effects: Map<TransitionType, TransitionEffect>;
   private config: TransitionConfig;
   private currentEngine: any = null;
-  private currentBodies: Map<number, any> = new Map();
+  private transitionStartTime: number = 0;
+  private transitionType: string | null = null;
 
   constructor() {
     this.config = { ...DEFAULT_TRANSITION_CONFIG };
     this.effects = new Map([
-      [TransitionType.WIND, windEffect],
-      [TransitionType.COLLAPSE, collapseEffect],
-      [TransitionType.EXPLOSION, explosionEffect],
-      [TransitionType.SPIRAL, spiralEffect],
-      [TransitionType.WAVE, waveEffect],
-      [TransitionType.GRAVITY, gravityEffect],
-      [TransitionType.MAGNET, magnetEffect],
-      [TransitionType.TORNADO, tornadoEffect],
-      [TransitionType.IMPLOSION, implosionEffect],
-      [TransitionType.SCATTER, scatterEffect],
+      [TransitionType.WIND, fadeToBlackEffect],
+      [TransitionType.COLLAPSE, pageTurnEffect],
+      [TransitionType.EXPLOSION, pixelateDissolveEffect],
+      [TransitionType.SPIRAL, wipeTransitionEffect],
+      [TransitionType.WAVE, zoomOutEffect],
+      // Removed physics-heavy effects for cleaner transitions
     ]);
   }
 
@@ -77,15 +74,13 @@ class TransitionEngine {
     timeoutId = window.setTimeout(() => {
       console.log(`🎬 [Transition] Starting ${selectedEffect.type} effect`);
 
-      // Apply the effect
+      // Apply the effect (stores metadata in engine)
       selectedEffect.apply(pieces, engine, canvasWidth, canvasHeight);
 
-      // Store bodies for cleanup
-      if (engine && engine.world && engine.world.bodies) {
-        this.currentBodies.clear();
-        engine.world.bodies.forEach((body: any, index: number) => {
-          this.currentBodies.set(index, body);
-        });
+      // Store transition info for rendering
+      if (engine) {
+        this.transitionStartTime = Date.now();
+        this.transitionType = (engine as any)._transitionType || null;
       }
 
       // Complete after transition duration
@@ -107,52 +102,39 @@ class TransitionEngine {
    * Cleanup physics engine
    */
   cleanup(): void {
-    if (this.currentEngine && typeof window !== "undefined") {
-      const Matter = (window as any).Matter;
-      if (Matter && this.currentEngine.world) {
-        try {
-          Matter.World.clear(this.currentEngine.world, false);
-          Matter.Engine.clear(this.currentEngine);
-        } catch (e) {
-          console.warn("Transition cleanup error:", e);
-        }
-      }
-    }
-    this.currentBodies.clear();
     this.currentEngine = null;
+    this.transitionStartTime = 0;
+    this.transitionType = null;
   }
 
   /**
-   * Get physics data for rendering
+   * Get transition progress (0-1)
    */
-  getPhysicsData(): Map<number, { x: number; y: number; angle: number }> {
-    const data = new Map<number, { x: number; y: number; angle: number }>();
-
-    if (!this.currentEngine || !this.currentEngine.world) return data;
-
-    this.currentBodies.forEach((body: any, id: number) => {
-      if (body && body.position) {
-        data.set(id, {
-          x: body.position.x,
-          y: body.position.y,
-          angle: body.angle,
-        });
-      }
-    });
-
-    return data;
+  getTransitionProgress(): number {
+    if (!this.transitionStartTime) return 0;
+    const elapsed = Date.now() - this.transitionStartTime;
+    return Math.min(elapsed / this.config.transitionDuration, 1);
   }
 
   /**
-   * Update physics engine (call in animation loop)
+   * Get current transition type
+   */
+  getTransitionType(): string | null {
+    return this.transitionType;
+  }
+
+  /**
+   * Update physics engine (not needed for new transitions, kept for compatibility)
    */
   update(deltaTime: number = 16.666): void {
-    if (this.currentEngine && typeof window !== "undefined") {
-      const Matter = (window as any).Matter;
-      if (Matter && Matter.Engine) {
-        Matter.Engine.update(this.currentEngine, deltaTime);
-      }
-    }
+    // New transitions don't use physics update
+  }
+
+  /**
+   * Get physics data (returns empty for new transitions)
+   */
+  getPhysicsData(): Map<number, { x: number; y: number; angle: number }> {
+    return new Map();
   }
 
   /**

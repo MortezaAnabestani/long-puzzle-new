@@ -5,18 +5,23 @@ export const gravityEffect: TransitionEffect = {
   duration: 4000,
 
   apply: (pieces: PuzzlePiece[], engine: any, canvasWidth: number, canvasHeight: number) => {
+    // بررسی‌های اولیه
     if (!engine || typeof window === "undefined") return;
     const Matter = (window as any).Matter;
     if (!Matter) return;
 
+    // 1. پاکسازی دنیا
     Matter.World.clear(engine.world, false);
 
-    const floorY = canvasHeight + 50;
-    const floor = Matter.Bodies.rectangle(canvasWidth / 2, floorY, canvasWidth * 3, 100, { isStatic: true });
-    Matter.World.add(engine.world, [floor]);
+    // تغییر مهم: حذف Floor (زمین)
+    // برای ترنزیشن، ما می‌خواهیم قطعات از پایین صفحه خارج شوند تا صفحه خالی شود.
 
-    engine.world.gravity.y = 2.0; // Strong gravity
+    // 2. تنظیم جاذبه متعادل
+    // عدد 1.0 استاندارد زمین است. زیاد کردن بیش از حد آن حرکت را زشت می‌کند.
+    engine.world.gravity.y = 1.0;
+    engine.world.gravity.x = 0;
 
+    const centerX = canvasWidth / 2;
     const bodies: any[] = [];
 
     pieces.forEach((piece) => {
@@ -26,20 +31,45 @@ export const gravityEffect: TransitionEffect = {
         piece.pw,
         piece.ph,
         {
-          restitution: 0.5,
-          friction: 0.1,
+          restitution: 0.4, // جهندگی کمتر نسبت به انفجار (سنگین‌تر)
+          friction: 0.05, // اصطکاک کمتر برای لیز خوردن راحت‌تر
+          frictionAir: 0.02, // مقاومت هوای کم برای سقوط روان
           density: 0.002,
+
+          // تنظیمات تصویر (الزامی برای ظاهر درست)
+          render: {
+            sprite: {
+              texture: (piece as any).img || (piece as any).imageSrc,
+              xScale: 1,
+              yScale: 1,
+            },
+          },
+
+          // تغییر مهم: عدم برخورد قطعات با یکدیگر
+          // این باعث می‌شود قطعات مثل "شره کردن رنگ" یا "ریزش شن" نرم پایین بریزند
+          // و به هم گیر نکنند.
+          collisionFilter: {
+            group: -1,
+          },
         }
       );
 
-      // Random initial horizontal velocity
+      // 3. محاسبه انحراف (Drift)
+      // قطعاتی که سمت چپ هستند کمی به چپ و قطعات راست کمی به راست می‌روند.
+      // این باعث می‌شود وسط صفحه زودتر خالی شود و دید کاربر باز شود.
+      const distanceFromCenter = body.position.x - centerX;
+      const driftFactor = (distanceFromCenter / canvasWidth) * 2; // عددی بین -1 تا 1
+
+      // 4. اعمال سرعت اولیه
       Matter.Body.setVelocity(body, {
-        x: (Math.random() - 0.5) * 3,
-        y: Math.random() * -2, // slight upward kick
+        x: driftFactor * (1 + Math.random()), // انحراف افقی ملایم
+        y: Math.random() * -3, // یک "پرش" کوچک اولیه به بالا قبل از سقوط (برای حس جدا شدن)
       });
 
-      // Random rotation
-      Matter.Body.setAngularVelocity(body, (Math.random() - 0.5) * 0.4);
+      // 5. چرخش ملایم
+      // چرخش بر اساس جهت حرکت (قطعات سمت راست ساعتگرد، چپ پادساعتگرد)
+      const rotationDirection = Math.sign(driftFactor) || 1;
+      Matter.Body.setAngularVelocity(body, rotationDirection * (Math.random() * 0.1));
 
       bodies.push(body);
     });

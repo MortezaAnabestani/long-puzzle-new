@@ -16,7 +16,6 @@ import {
   calcChapterCount,
 } from "./types";
 import { useProductionPipeline } from "./hooks/useProductionPipeline";
-import { CanvasHandle } from "./components/AutoColorCanvas";
 import Sidebar from "./components/Sidebar";
 import CanvasArea from "./components/CanvasArea";
 import Header from "./components/Header";
@@ -29,6 +28,7 @@ import EngagementCTA from "./components/puzzle/EngagementCTA";
 import { MusicTrack } from "./components/sidebar/MusicUploader";
 import { playWithFade, pauseWithFade } from "./utils/audioFade";
 import { BackendModeProvider } from "./contexts/BackendModeContext";
+import { TestModeProvider } from "./contexts/TestModeContext";
 
 // ─── TRANSITION DURATIONS (ms) ──────────────────────────────────────
 
@@ -44,7 +44,7 @@ const AppContent: React.FC = () => {
   // ─── USER PREFERENCES — فقط long-form فیلدها ──────────────────────
   const [preferences, setPreferences] = useState<UserPreferences>({
     genre: ReconstructionGenre.HISTORICAL_RECONSTRUCTION,
-    topic: "سقوط روم باستان",
+    topic: "",
     topicSource: TopicSource.AI_SUGGESTED,
     narrativeLens: NarrativeLens.ORIGIN_STORY,
     masterVisualStyle: MasterVisualStyle.EPIC_PAINTERLY,
@@ -511,9 +511,11 @@ const AppContent: React.FC = () => {
 };
 
 const App: React.FC = () => (
-  <BackendModeProvider>
-    <AppContent />
-  </BackendModeProvider>
+  <TestModeProvider>
+    <BackendModeProvider>
+      <AppContent />
+    </BackendModeProvider>
+  </TestModeProvider>
 );
 
 export default App;

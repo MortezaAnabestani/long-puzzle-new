@@ -1,17 +1,12 @@
 /**
  * Documentary Puzzle Studio — Production Pipeline Hook
  *
- * فکشن اصلی: processPipelineItem
+ * ✅ WITH TEST MODE INTEGRATION
+ *
+ * فانکشن اصلی: processPipelineItem
  *   SCAN → NARRATIVE → IMAGES (batch) → MUSIC → METADATA → READY
  *
- * موندنی از قبل:
- *   selectSmartMusic, fetchAudioBlob, decodeAndStoreMusicBuffer,
- *   executePackaging, downloadFile, updateProductionStep
- *
- * حذف شده:
- *   VIRAL loop, BREAKING loop, similarity check, randomizeVisualParameters,
- *   generateArtImage, YouTubeMetadata, TopicType, MusicSelectionMode,
- *   VIRAL_CATEGORIES, selectFreshCategory, addTopicVariation, getTrendingTopics
+ * 🧪 TEST MODE: بای‌پس کردن تمام AI calls و استفاده از داده‌های آماده
  */
 
 import React, { useState, useCallback, useEffect, useRef } from "react";
@@ -43,6 +38,8 @@ import { contentApi, ContentPayload } from "../services/api/contentApi";
 import { sonicEngine } from "../services/proceduralAudio";
 import { getJalaliDate } from "../utils/dateUtils";
 import { getFolderFromMood } from "../services/ai/musicSelection";
+import { useTestMode } from "../contexts/TestModeContext";
+import { TEST_PROJECTS } from "../utils/testModeData";
 
 // ─── TYPES ────────────────────────────────────────────────────────────
 
@@ -64,13 +61,12 @@ export interface ProductionStep {
   details?: string;
 }
 
-/** قیتم صورت‌صورت auto-pilot یا دستی */
 export interface DocumentaryQueueItem {
   genre: ReconstructionGenre;
-  topic: string; // خالی → AI موضوع میده
+  topic: string;
   narrativeLens: NarrativeLens;
   masterVisualStyle: MasterVisualStyle;
-  targetDurationMinutes: number; // 8 | 10 | 12 | 15
+  targetDurationMinutes: number;
 }
 
 export interface PipelineState {
@@ -89,7 +85,7 @@ export interface PipelineState {
   pipelineStep: PipelineStep;
   productionSteps: ProductionStep[];
   storyArc: StoryArc | null;
-  docSnippets: string[]; // keyFacts از narrative
+  docSnippets: string[];
   lastVideoBlob: Blob | null;
   thumbnailDataUrl: string | null;
 }
@@ -98,7 +94,7 @@ export interface PipelineState {
 
 const CLOUDFLARE_WORKER_URL = "https://plain-tooth-75c3.jujube-bros.workers.dev/";
 
-// ─── AUDIO HELPERS (موندنی، دست‌نخورده) ─────────────────────────────
+// ─── AUDIO HELPERS ────────────────────────────────────────────────────
 
 const decodeAndStoreMusicBuffer = async (
   audioRef: React.RefObject<HTMLAudioElement | null>,
@@ -147,7 +143,7 @@ const decodeAndStoreMusicBuffer = async (
   }
 };
 
-// ─── SMART MUSIC (موندنی، فقط MusicSelectionMode حذف شد — backend+AI fallback) ─
+// ─── SMART MUSIC ──────────────────────────────────────────────────────
 
 interface SmartMusicParams {
   musicTracks: MusicTrack[];
@@ -164,7 +160,6 @@ const selectSmartMusic = async (
 ): Promise<{ source: string; title: string; blob?: Blob } | null> => {
   const { musicTracks, mood, topic, fetchAudioBlob, onAddCloudTrack, setActiveTrackName, audioRef } = params;
 
-  // Priority 1: دستی
   const manual = musicTracks.filter((t) => t.source === "manual");
   if (manual.length > 0) {
     const track = manual[0];
@@ -177,7 +172,6 @@ const selectSmartMusic = async (
     return { source: "Manual Upload", title: track.name };
   }
 
-  // Priority 2: Backend database
   let trackData: { title: string; url: string; source: string } | null = null;
   try {
     const { assetApi } = await import("../services/api/assetApi");
@@ -194,7 +188,6 @@ const selectSmartMusic = async (
     console.warn("⚠️ [MUSIC] Backend search failed:", e);
   }
 
-  // Priority 3: AI search
   if (!trackData) {
     try {
       const { findSmartMusicByMood } = await import("../services/geminiService");
@@ -264,6 +257,9 @@ export const useProductionPipeline = (
   audioRef: React.RefObject<HTMLAudioElement | null>,
   musicBufferRef: React.MutableRefObject<AudioBuffer | null>
 ) => {
+  // ✅ TEST MODE HOOK
+  const { isTestMode, selectedTestProject } = useTestMode();
+
   const [state, setState] = useState<PipelineState>({
     project: null,
     currentChapterIndex: 0,
@@ -289,7 +285,7 @@ export const useProductionPipeline = (
   const [isMetadataLoading, setIsMetadataLoading] = useState(false);
   const isExportingRef = useRef(false);
 
-  // ─── STEP HELPERS ───────────────────────────────────────────────
+  // ─── STEP HELPERS ─────────────────────────────────────────────────
 
   const updateProductionStep = useCallback(
     (stepId: string, status: ProductionStep["status"], details?: string) => {
@@ -325,7 +321,7 @@ export const useProductionPipeline = (
     }));
   }, []);
 
-  // ─── FETCH AUDIO BLOB (موندنی) ────────────────────────────────
+  // ─── FETCH AUDIO BLOB ─────────────────────────────────────────────
 
   const fetchAudioBlob = useCallback(async (url: string): Promise<{ url: string; blob: Blob } | null> => {
     const proxies = [
@@ -350,7 +346,7 @@ export const useProductionPipeline = (
     return null;
   }, []);
 
-  // ─── DOWNLOAD ─────────────────────────────────────────────────
+  // ─── DOWNLOAD ─────────────────────────────────────────────────────
 
   const downloadFile = (name: string, blob: Blob) => {
     const url = URL.createObjectURL(blob);
@@ -363,7 +359,7 @@ export const useProductionPipeline = (
     setTimeout(() => URL.revokeObjectURL(url), 3000);
   };
 
-  // ─── PACKAGING (موندنی، metadata شکلش عوض شد) ─────────────────
+  // ─── PACKAGING ────────────────────────────────────────────────────
 
   const executePackaging = useCallback(
     async (videoBlob: Blob) => {
@@ -377,10 +373,8 @@ export const useProductionPipeline = (
       updateProductionStep("📦 PACKAGE", "in_progress", "دانلود شروع شد...");
 
       try {
-        // ── ویدئو ──
         downloadFile(`${base}_Video.${videoBlob.type.includes("mp4") ? "mp4" : "webm"}`, videoBlob);
 
-        // ── metadata (شامل chapter markers) ──
         if (metadata) {
           await new Promise((r) => setTimeout(r, 1500));
           const markerText = metadata.chapterMarkers.map((m) => `${m.timestamp} - ${m.title}`).join("\n");
@@ -399,14 +393,12 @@ export const useProductionPipeline = (
           );
         }
 
-        // ── تامبنیل ──
         if (state.thumbnailDataUrl) {
           await new Promise((r) => setTimeout(r, 1500));
           const res = await fetch(state.thumbnailDataUrl);
           downloadFile(`${base}_Thumbnail.jpg`, await res.blob());
         }
 
-        // ── ذخیره دیتابیس ──
         if (metadata && state.project && state.storyArc) {
           try {
             const payload: ContentPayload = {
@@ -457,7 +449,6 @@ export const useProductionPipeline = (
         setState((prev) => ({ ...prev, lastVideoBlob: null }));
         isExportingRef.current = false;
 
-        // ── queue بعدیه؟ ──
         setTimeout(() => {
           setState((prev) => {
             const nextIdx = prev.currentQueueIdx + 1;
@@ -485,17 +476,222 @@ export const useProductionPipeline = (
     [metadata, state.thumbnailDataUrl, state.project, state.storyArc, updateProductionStep]
   );
 
-  // packaging trigger
   useEffect(() => {
     if (state.pipelineStep === "PACKAGING" && state.lastVideoBlob && !isExportingRef.current) {
       executePackaging(state.lastVideoBlob);
     }
   }, [state.pipelineStep, state.lastVideoBlob, executePackaging]);
 
-  // ─── MAIN PIPELINE ──────────────────────────────────────────────
+  // ─── 🧪 TEST MODE PIPELINE ────────────────────────────────────────
 
-  const processPipelineItem = useCallback(
+  const processTestModePipeline = useCallback(
     async (item: DocumentaryQueueItem) => {
+      console.log("\n🧪 ═══════════════════════════════════════════════════════");
+      console.log("🧪 TEST MODE ACTIVE - Using sample data (NO AI CALLS)");
+      console.log("🧪 ═══════════════════════════════════════════════════════\n");
+
+      if (!selectedTestProject) {
+        setState((s) => ({ ...s, error: "لطفاً ابتدا یک پروژه تست انتخاب کنید", isGenerating: false }));
+        return;
+      }
+
+      initProductionSteps();
+      setState((s) => ({
+        ...s,
+        pipelineStep: "SCAN",
+        isGenerating: true,
+        error: null,
+        progress: 0,
+        project: null,
+        storyArc: null,
+        currentChapterIndex: 0,
+      }));
+      setMetadata(null);
+
+      try {
+        // ─── STEP 1: SCAN (فوری) ──────────────────────────────────
+        console.log(`🧪 [SCAN] Loading test project: "${selectedTestProject.title}"`);
+        await new Promise((r) => setTimeout(r, 300));
+        updateProductionStep(
+          "📊 SCAN",
+          "completed",
+          `TEST: ${selectedTestProject.chapters.length} فصل — ${selectedTestProject.totalDuration}s`
+        );
+
+        // ─── STEP 2: NARRATIVE (فوری - از test data) ──────────────
+        setState((s) => ({ ...s, pipelineStep: "NARRATIVE" }));
+        console.log(`🧪 [NARRATIVE] Using pre-made test narratives`);
+        await new Promise((r) => setTimeout(r, 300));
+        updateProductionStep(
+          "📖 NARRATIVE",
+          "completed",
+          `TEST: ${selectedTestProject.chapters.length} فصل آماده`
+        );
+
+        // ساخت chapters از test data
+        const roles = assignChapterRoles(selectedTestProject.chapters.length);
+        const chapters: Chapter[] = selectedTestProject.chapters.map((testCh, i) => {
+          const role = roles[i];
+          const complexity = getChapterComplexity(role);
+          const pieceCount = getPieceCountForComplexity(complexity, preferences.defaultPieceCount);
+
+          return {
+            id: `test_ch_${i}`,
+            index: i,
+            role,
+            title: testCh.title,
+            narrativeText: testCh.narrativeText,
+            imagePrompt: testCh.narrativeText, // استفاده از narrativeText به عنوان prompt
+            imageUrl: testCh.imageUrl, // ✅ تصویر از قبل آماده است
+            puzzleConfig: {
+              pieceCount,
+              shape: preferences.defaultShape,
+              material: preferences.defaultMaterial,
+              movement: preferences.defaultMovement,
+              complexityLevel: complexity,
+            },
+            durationSeconds: testCh.duration,
+            transition: getChapterTransition(role),
+            status: ChapterStatus.IMAGE_READY, // ✅ تصویر از قبل آماده است
+          };
+        });
+
+        // ─── STEP 3: IMAGES (بای‌پس - تصاویر از قبل آماده) ───────
+        setState((s) => ({ ...s, pipelineStep: "IMAGES" }));
+        console.log(`🧪 [IMAGES] Images already available in test data - SKIPPING AI generation`);
+        await new Promise((r) => setTimeout(r, 500));
+        updateProductionStep(
+          "🖼️ IMAGES",
+          "completed",
+          `TEST: ${chapters.length}/${chapters.length} تصویر آماده (بدون AI)`
+        );
+
+        // ─── STEP 4: MUSIC (بای‌پس یا استفاده از دستی) ────────────
+        setState((s) => ({ ...s, pipelineStep: "MUSIC" }));
+        console.log(`🧪 [MUSIC] Checking for manual music or using test music`);
+        await new Promise((r) => setTimeout(r, 300));
+
+        // اگر موسیقی دستی داریم استفاده کن، وگرنه skip
+        const manualTrack = musicTracks.find((t) => t.source === "manual");
+        if (manualTrack && audioRef.current) {
+          audioRef.current.src = manualTrack.url;
+          audioRef.current.load();
+          setActiveTrackName(manualTrack.name);
+          updateProductionStep("🎵 MUSIC", "completed", `Manual: ${manualTrack.name}`);
+        } else {
+          updateProductionStep("🎵 MUSIC", "completed", "TEST: بدون موسیقی");
+          musicBufferRef.current = null;
+        }
+
+        // ─── STEP 5: METADATA ──────────────────────────────────────
+        setState((s) => ({ ...s, pipelineStep: "METADATA" }));
+        updateProductionStep("📝 METADATA", "in_progress");
+        setIsMetadataLoading(true);
+        await new Promise((r) => setTimeout(r, 300));
+
+        // ساخت StoryArc ساده برای تست
+        const testStoryArc: StoryArc = {
+          hook: selectedTestProject.chapters[0]?.narrativeText || "Test hook",
+          buildup: selectedTestProject.chapters[1]?.narrativeText || "Test buildup",
+          climax:
+            selectedTestProject.chapters[Math.floor(selectedTestProject.chapters.length / 2)]
+              ?.narrativeText || "Test climax",
+          reveal:
+            selectedTestProject.chapters[selectedTestProject.chapters.length - 2]?.narrativeText ||
+            "Test reveal",
+          conclusion:
+            selectedTestProject.chapters[selectedTestProject.chapters.length - 1]?.narrativeText ||
+            "Test conclusion",
+        };
+
+        const project: DocumentaryProject = {
+          id: `test_doc_${Date.now()}`,
+          genre: item.genre,
+          topic: selectedTestProject.title,
+          narrativeLens: item.narrativeLens,
+          targetDurationMinutes: Math.floor(selectedTestProject.totalDuration / 60),
+          masterVisualStyle: item.masterVisualStyle,
+          masterStylePrompt: `Test visual style for ${selectedTestProject.title}`,
+          chapters,
+          musicTimeline: {
+            ambientTrackUrl: audioRef.current?.src || null,
+            climaxTrackUrl: null,
+            revealTrackUrl: null,
+            chapterStingers: [],
+          },
+          status: ProjectStatus.READY_TO_PLAY,
+          createdAt: Date.now(),
+        };
+
+        const docMetadata = buildDocumentaryMetadata(project);
+        setMetadata(docMetadata);
+        setIsMetadataLoading(false);
+        updateProductionStep(
+          "📝 METADATA",
+          "completed",
+          `TEST: ${docMetadata.chapterMarkers.length} markers`
+        );
+
+        // ─── STEP 6: READY ─────────────────────────────────────────
+        updateProductionStep("🎬 READY", "completed", "آماده پخش (TEST MODE)");
+
+        setState((s) => ({
+          ...s,
+          project,
+          storyArc: testStoryArc,
+          docSnippets: chapters.map((ch) => ch.title),
+          isGenerating: false,
+          pipelineStep: "READY",
+        }));
+
+        console.log(`\n🧪 ═══════════════════════════════════════════════════════`);
+        console.log(`✅ TEST PROJECT READY: "${project.topic}"`);
+        console.log(`   Chapters: ${chapters.length}`);
+        console.log(`   Duration: ~${project.targetDurationMinutes} min`);
+        console.log(`   All images pre-loaded from test data`);
+        console.log(`   NO AI API CALLS WERE MADE`);
+        console.log(`🧪 ═══════════════════════════════════════════════════════\n`);
+
+        // AUTO MODE در تست
+        if (state.isAutoMode) {
+          updateProductionStep("🎬 READY", "in_progress", "10s صبر... بعد شروع پخش (TEST)");
+          setTimeout(() => {
+            setState((s) => ({ ...s, isSolving: true, isRecording: true, pipelineStep: "RECORDING" }));
+            updateProductionStep("🎥 RECORD", "in_progress", "ضبط شروع شد (TEST)");
+          }, 10000);
+        }
+      } catch (e) {
+        console.error("❌ [TEST MODE] Error:", e);
+        setState((s) => ({
+          ...s,
+          isGenerating: false,
+          isAutoMode: false,
+          pipelineStep: "IDLE",
+          error: "Test Mode Error — لطفاً دوباره سعی کنید",
+        }));
+      }
+    },
+    [
+      selectedTestProject,
+      preferences,
+      musicTracks,
+      audioRef,
+      musicBufferRef,
+      state.isAutoMode,
+      initProductionSteps,
+      updateProductionStep,
+      setActiveTrackName,
+    ]
+  );
+
+  // ─── AI MODE PIPELINE (اصلی) ──────────────────────────────────────
+
+  const processAIModePipeline = useCallback(
+    async (item: DocumentaryQueueItem) => {
+      console.log("\n🤖 ═══════════════════════════════════════════════════════");
+      console.log("🤖 AI MODE ACTIVE - Full generation with Gemini");
+      console.log("🤖 ═══════════════════════════════════════════════════════\n");
+
       initProductionSteps();
       setState((s) => ({
         ...s,
@@ -542,7 +738,6 @@ export const useProductionPipeline = (
           `${narrativeResponse.chapters.length} فصل تولید شد`
         );
 
-        // ─── فصل‌ها رو Chapter objects بسازیم ────────────────────
         const roles = assignChapterRoles(narrativeResponse.chapters.length);
 
         const chapters: Chapter[] = narrativeResponse.chapters.map((nc, i) => {
@@ -586,7 +781,6 @@ export const useProductionPipeline = (
                 "in_progress",
                 `فصل ${event.chapterIndex + 1}/${event.totalChapters} تصویر شد`
               );
-              // imageUrl local update — imageResults.results بعداً کامل میشه
               if (event.imageUrl) {
                 chapters[event.chapterIndex].imageUrl = event.imageUrl;
                 chapters[event.chapterIndex].status = ChapterStatus.IMAGE_READY;
@@ -598,7 +792,6 @@ export const useProductionPipeline = (
           }
         );
 
-        // نتیجه‌های batch اعمال
         imageResults.results.forEach((r) => {
           if (r.status === "success") {
             chapters[r.chapterIndex].imageUrl = r.imageUrl;
@@ -652,8 +845,8 @@ export const useProductionPipeline = (
           chapters,
           musicTimeline: {
             ambientTrackUrl: audioRef.current?.src || null,
-            climaxTrackUrl: null, // Round 4
-            revealTrackUrl: null, // Round 4
+            climaxTrackUrl: null,
+            revealTrackUrl: null,
             chapterStingers: [],
           },
           status: ProjectStatus.READY_TO_PLAY,
@@ -683,7 +876,6 @@ export const useProductionPipeline = (
 
         console.log(`✅ [PIPELINE] Documentary ready: "${project.topic}" — ${chapters.length} فصل`);
 
-        // ─── AUTO MODE: 10s صبر بعد پخش ──────────────────────
         if (state.isAutoMode) {
           updateProductionStep("🎬 READY", "in_progress", "10s صبر... بعد شروع پخش");
           setTimeout(() => {
@@ -716,7 +908,20 @@ export const useProductionPipeline = (
     ]
   );
 
-  // ─── AUTO PILOT TOGGLE ──────────────────────────────────────────
+  // ─── MAIN ROUTER: TEST MODE vs AI MODE ───────────────────────────
+
+  const processPipelineItem = useCallback(
+    async (item: DocumentaryQueueItem) => {
+      if (isTestMode) {
+        await processTestModePipeline(item);
+      } else {
+        await processAIModePipeline(item);
+      }
+    },
+    [isTestMode, processTestModePipeline, processAIModePipeline]
+  );
+
+  // ─── AUTO PILOT TOGGLE ────────────────────────────────────────────
 
   const toggleAutoMode = useCallback(() => {
     setState((s) => {
@@ -763,7 +968,7 @@ export const useProductionPipeline = (
     });
   }, []);
 
-  // ─── AUTO PILOT LOOP ────────────────────────────────────────────
+  // ─── AUTO PILOT LOOP ──────────────────────────────────────────────
 
   useEffect(() => {
     if (
@@ -783,6 +988,7 @@ export const useProductionPipeline = (
     setState,
     metadata,
     isMetadataLoading,
+    isTestMode, // ✅ برای نمایش در UI
     setThumbnailDataUrl: (url: string | null) => setState((s) => ({ ...s, thumbnailDataUrl: url })),
     setLastVideoBlob: (blob: Blob | null) => setState((s) => ({ ...s, lastVideoBlob: blob })),
     processPipelineItem,

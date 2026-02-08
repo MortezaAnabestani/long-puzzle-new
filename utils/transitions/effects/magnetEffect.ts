@@ -9,24 +9,23 @@ export const magnetEffect: TransitionEffect = {
     const Matter = (window as any).Matter;
     if (!Matter) return;
 
+    // 1. پاکسازی دنیا
     Matter.World.clear(engine.world, false);
 
-    const floorY = canvasHeight + 50;
-    const floor = Matter.Bodies.rectangle(canvasWidth / 2, floorY, canvasWidth * 3, 100, { isStatic: true });
-    Matter.World.add(engine.world, [floor]);
+    // حذف کف (Floor) و جاذبه
+    // در افکت آهنربا، جاذبه مزاحم است. ما می‌خواهیم نیروی مغناطیسی تنها حاکم باشد.
+    engine.world.gravity.y = 0;
+    engine.world.gravity.x = 0;
 
-    engine.world.gravity.y = 1.0;
-
-    // Create 3-5 random magnetic points
-    const numMagnets = 3 + Math.floor(Math.random() * 3);
+    // 2. تعریف نقاط مغناطیسی (Attractors)
+    // بهتر است این نقاط کمی دور از مرکز باشند تا پازل "باز" شود.
+    const numMagnets = 3; // تعداد ثابت برای کنترل بهتر
     const magnets: { x: number; y: number }[] = [];
 
-    for (let i = 0; i < numMagnets; i++) {
-      magnets.push({
-        x: canvasWidth * (0.2 + Math.random() * 0.6),
-        y: canvasHeight * (0.2 + Math.random() * 0.4),
-      });
-    }
+    // ایجاد آهنرباها در گوشه‌ها یا اطراف صفحه (برای اینکه مرکز صفحه تمیز شود)
+    magnets.push({ x: canvasWidth * 0.2, y: canvasHeight * 0.2 }); // بالا چپ
+    magnets.push({ x: canvasWidth * 0.8, y: canvasHeight * 0.2 }); // بالا راست
+    magnets.push({ x: canvasWidth * 0.5, y: canvasHeight * 0.8 }); // پایین وسط
 
     const bodies: any[] = [];
 
@@ -37,13 +36,29 @@ export const magnetEffect: TransitionEffect = {
         piece.pw,
         piece.ph,
         {
-          restitution: 0.3,
-          friction: 0.2,
-          density: 0.0012,
+          restitution: 0, // بدون جهندگی (می‌خواهیم بچسبند)
+          friction: 1, // اصطکاک بالا
+          frictionAir: 0.1, // مقاومت هوای بسیار بالا (نکته کلیدی!)
+          density: 0.001,
+
+          // تنظیمات تصویر
+          render: {
+            sprite: {
+              texture: (piece as any).img || (piece as any).imageSrc,
+              xScale: 1,
+              yScale: 1,
+            },
+          },
+
+          // جلوگیری از برخورد
+          // این باعث می‌شود قطعات مثل براده‌های آهن روی هم تلمبار شوند
+          collisionFilter: {
+            group: -1,
+          },
         }
       );
 
-      // Find nearest magnet
+      // پیدا کردن نزدیک‌ترین آهنربا
       let nearestMagnet = magnets[0];
       let minDist = Infinity;
 
@@ -57,15 +72,35 @@ export const magnetEffect: TransitionEffect = {
         }
       });
 
-      // Apply magnetic force
+      // محاسبه بردار جهت به سمت آهنربا
       const dx = nearestMagnet.x - body.position.x;
       const dy = nearestMagnet.y - body.position.y;
-      const distance = Math.sqrt(dx * dx + dy * dy) || 1;
 
-      Matter.Body.applyForce(body, body.position, {
-        x: (dx / distance) * 0.2,
-        y: (dy / distance) * 0.15,
+      // اضافه کردن کمی "پراکندگی" (Jitter)
+      // اگر همه دقیقاً به یک نقطه بروند، روی هم محو می‌شوند.
+      // با این کار یک "ابر" دور آهنربا تشکیل می‌دهند.
+      const jitterX = (Math.random() - 0.5) * 50;
+      const jitterY = (Math.random() - 0.5) * 50;
+
+      const targetX = dx + jitterX;
+      const targetY = dy + jitterY;
+
+      // 3. حرکت سریع و ترمز شدید (Snap Effect)
+      // به جای applyForce، اینجا setVelocity بهتر کار می‌کند.
+      // چون frictionAir را بالا بردیم (0.1)، قطعات با سرعت شلیک می‌شوند و
+      // وقتی به نزدیکی آهنربا رسیدند، به دلیل اصطکاک هوا متوقف می‌شوند.
+      // این حس "چسبیدن مغناطیسی" را عالی شبیه‌سازی می‌کند.
+
+      const speed = 15 + Math.random() * 10; // سرعت متفاوت برای هر قطعه
+      const angle = Math.atan2(targetY, targetX);
+
+      Matter.Body.setVelocity(body, {
+        x: Math.cos(angle) * speed,
+        y: Math.sin(angle) * speed,
       });
+
+      // چرخش سریع هنگام جذب شدن
+      Matter.Body.setAngularVelocity(body, (Math.random() - 0.5) * 0.8);
 
       bodies.push(body);
     });

@@ -9,13 +9,15 @@ export const implosionEffect: TransitionEffect = {
     const Matter = (window as any).Matter;
     if (!Matter) return;
 
+    // 1. پاکسازی دنیا
     Matter.World.clear(engine.world, false);
 
-    const floorY = canvasHeight + 50;
-    const floor = Matter.Bodies.rectangle(canvasWidth / 2, floorY, canvasWidth * 3, 100, { isStatic: true });
-    Matter.World.add(engine.world, [floor]);
+    // حذف کف (Floor) برای اینکه قطعات در فضایی بی‌پایان باشند
 
-    engine.world.gravity.y = 0.5; // Weak gravity
+    // 2. جاذبه صفر (برای ایجاد خلاء فضایی)
+    // جاذبه‌ی y=0.5 باعث می‌شود گرداب به سمت پایین کشیده شود که زشت است.
+    engine.world.gravity.y = 0;
+    engine.world.gravity.x = 0;
 
     const centerX = canvasWidth / 2;
     const centerY = canvasHeight / 2;
@@ -28,27 +30,57 @@ export const implosionEffect: TransitionEffect = {
         piece.pw,
         piece.ph,
         {
-          restitution: 0.2,
-          friction: 0.05,
-          density: 0.001,
+          restitution: 0.1, // جهندگی کم (نمی‌خواهیم زیاد کمانه کنند)
+          friction: 0, // اصطکاک صفر برای سرعت بالا
+          frictionAir: 0.03, // کمی مقاومت هوا برای اینکه حرکت بعد از مدتی آرام شود
+          density: 0.005, // چگالی بالاتر برای اینکه نیروها اثر سنگین‌تری داشته باشند
+
+          // تنظیمات رندر
+          render: {
+            sprite: {
+              texture: (piece as any).img || (piece as any).imageSrc,
+              xScale: 1,
+              yScale: 1,
+            },
+          },
+
+          // حیاتی: جلوگیری از برخورد قطعات
+          // این باعث می‌شود قطعات در مرکز صفحه روی هم جمع شوند بدون اینکه همدیگر را دفع کنند
+          collisionFilter: {
+            group: -1,
+          },
         }
       );
 
-      // Calculate vector to center
+      // محاسبه فاصله و زاویه نسبت به مرکز
       const dx = centerX - body.position.x;
       const dy = centerY - body.position.y;
       const distance = Math.sqrt(dx * dx + dy * dy) || 1;
 
-      // Very strong inward force (implosion)
-      const forceMagnitude = 0.35;
+      // بردار نرمال شده به سمت مرکز
+      const normalX = dx / distance;
+      const normalY = dy / distance;
 
-      Matter.Body.applyForce(body, body.position, {
-        x: (dx / distance) * forceMagnitude,
-        y: (dy / distance) * forceMagnitude,
+      // 3. فرمول جادویی گرداب (Vortex)
+      // ترکیب نیروی جذب (Pull) + نیروی چرخشی (Spin)
+      const pullStrength = 0.8; // قدرت مکش به داخل
+      const spinStrength = 0.5; // قدرت چرخش به دور مرکز
+
+      // محاسبه نیروی نهایی
+      // بخش اول: کشیدن به مرکز
+      // بخش دوم: چرخش 90 درجه (برای ایجاد حالت گرداب) -> (-y, x)
+      const forceX = normalX * pullStrength - normalY * spinStrength;
+      const forceY = normalY * pullStrength + normalX * spinStrength;
+
+      // اعمال نیرو با در نظر گرفتن جرم (برای حرکت یکنواخت همه قطعات)
+      // استفاده از setVelocity برای حرکت قطعی‌تر نسبت به applyForce تک‌ضرب
+      Matter.Body.setVelocity(body, {
+        x: forceX * 15, // ضریب سرعت
+        y: forceY * 15,
       });
 
-      // Violent rotation
-      Matter.Body.setAngularVelocity(body, (Math.random() - 0.5) * 0.5);
+      // چرخش وحشیانه خود قطعه به دور خودش
+      Matter.Body.setAngularVelocity(body, (Math.random() > 0.5 ? 1 : -1) * 0.5);
 
       bodies.push(body);
     });

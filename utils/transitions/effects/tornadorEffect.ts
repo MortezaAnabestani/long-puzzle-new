@@ -9,16 +9,17 @@ export const tornadoEffect: TransitionEffect = {
     const Matter = (window as any).Matter;
     if (!Matter) return;
 
+    // 1. پاکسازی دنیا
     Matter.World.clear(engine.world, false);
 
-    const floorY = canvasHeight + 50;
-    const floor = Matter.Bodies.rectangle(canvasWidth / 2, floorY, canvasWidth * 3, 100, { isStatic: true });
-    Matter.World.add(engine.world, [floor]);
+    // حذف کف (Floor) -> گردباد اشیاء را به آسمان می‌برد
 
-    engine.world.gravity.y = 0.6; // Reduced gravity for tornado lift
+    // 2. تنظیم جاذبه معکوس (Anti-Gravity)
+    // جاذبه منفی باعث می‌شود همه چیز به طور طبیعی به سمت بالا "سقوط" کند (مکش گردباد)
+    engine.world.gravity.y = -1.5; // مکش قوی به بالا
+    engine.world.gravity.x = 0;
 
     const centerX = canvasWidth / 2;
-    const clockwise = Math.random() > 0.5;
     const bodies: any[] = [];
 
     pieces.forEach((piece) => {
@@ -28,30 +29,51 @@ export const tornadoEffect: TransitionEffect = {
         piece.pw,
         piece.ph,
         {
-          restitution: 0.3,
-          friction: 0.1,
-          density: 0.0008,
+          restitution: 0.4,
+          friction: 0.05,
+          frictionAir: 0.03, // مقاومت هوا برای جلوگیری از سرعت بی‌نهایت
+          density: 0.001,
+
+          // تنظیمات تصویر
+          render: {
+            sprite: {
+              texture: (piece as any).img || (piece as any).imageSrc,
+              xScale: 1,
+              yScale: 1,
+            },
+          },
+
+          // عدم برخورد: بسیار مهم!
+          // در گردباد قطعات خیلی نزدیک به هم حرکت می‌کنند.
+          // اگر برخورد داشته باشند، به جای چرخش زیبا، به اطراف پرت می‌شوند.
+          collisionFilter: {
+            group: -1,
+          },
         }
       );
 
-      // Calculate distance from center vertical axis
-      const dx = body.position.x - centerX;
-      const dy = body.position.y;
-      const radius = Math.abs(dx);
+      // فاصله از محور مرکزی گردباد
+      const dx = centerX - body.position.x;
 
-      // Tangential force for rotation
-      const tangentialForce = clockwise ? 0.18 : -0.18;
+      // 3. شبیه‌سازی حرکت گردابی (Vortex Simulation)
+      // ترفند: به جای چرخاندن واقعی (که در 2D سخت دیده می‌شود)،
+      // ما قطعات را به سمت خط مرکزی (Center Line) هل می‌دهیم.
+      // ترکیب "جاذبه منفی" (بالا) و "نیروی فنری به مرکز" (چپ/راست) باعث ایجاد موج سینوسی می‌شود.
 
-      // Upward force stronger at center
-      const upwardForce = -0.2 * (1 - radius / canvasWidth);
+      const forceToCenter = dx * 0.002; // هرچه دورتر باشد، محکم‌تر به مرکز کشیده می‌شود (قانون فنر)
 
-      Matter.Body.applyForce(body, body.position, {
-        x: tangentialForce * (1 + Math.random() * 0.3),
-        y: upwardForce + Math.random() * -0.05,
+      // اضافه کردن کمی آشوب (Chaos) که گردباد خیلی تمیز و مصنوعی نباشد
+      const randomChaos = (Math.random() - 0.5) * 0.05;
+
+      // اعمال سرعت اولیه
+      Matter.Body.setVelocity(body, {
+        x: forceToCenter * 50 + (Math.random() - 0.5) * 5, // سرعت افقی به سمت مرکز
+        y: -5 - Math.random() * 10, // سرعت اولیه زیاد به سمت بالا (شلیک شدن)
       });
 
-      // Strong rotation
-      Matter.Body.setAngularVelocity(body, clockwise ? 0.25 : -0.25);
+      // اعمال نیروی مداوم (اختیاری - اما اینجا با سرعت اولیه کار را جمع کردیم)
+      // اما برای چرخش دور خود قطعه:
+      Matter.Body.setAngularVelocity(body, forceToCenter * 10 + (Math.random() - 0.5));
 
       bodies.push(body);
     });

@@ -32,7 +32,8 @@ import SnapSoundUploader from "./sidebar/SnapSoundUploader";
 import ChannelLogoUploader from "./sidebar/ChannelLogoUploader";
 import SmartMusicFinder from "./sidebar/SmartMusicFinder";
 import { contentApi } from "../services/api/contentApi";
-
+import TestModeToggle from "./sidebar/TestModeToggle";
+import { useTestMode } from "../contexts/TestModeContext";
 interface SidebarProps {
   preferences: UserPreferences;
   setPreferences: (p: UserPreferences) => void;
@@ -115,6 +116,7 @@ const Sidebar: React.FC<SidebarProps> = ({
   const [dbConnected, setDbConnected] = useState(false);
   const [dbError, setDbError] = useState<string | null>(null);
   const isDisabled = isSolving || isAutoMode || isGenerating;
+  const { isTestMode, toggleTestMode, setTestProject } = useTestMode();
 
   useEffect(() => {
     const check = async () => {
@@ -233,7 +235,12 @@ const Sidebar: React.FC<SidebarProps> = ({
             <Sparkles className="w-3 h-3" />
             <h3 className="text-[9px] font-black uppercase tracking-[0.2em]">01_Genre & Topic</h3>
           </div>
-
+          <TestModeToggle
+            isTestMode={isTestMode}
+            onToggle={toggleTestMode}
+            onSelectTestProject={setTestProject}
+            disabled={isSolving}
+          />
           <div className="space-y-3">
             {/* Auto Pilot */}
             <button
