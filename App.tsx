@@ -149,8 +149,17 @@ const AppContent: React.FC = () => {
   useEffect(() => {
     if (!state.project) return;
     const sec = globalElapsedTime / 1000;
-    setShowMidCTA(sec >= 150 && sec <= 210);
-    setShowFinalCTA(sec >= 300 && sec <= 360);
+
+    // ✅ فقط در Single Mode (vertical)، نه Grid Mode
+    const isGridMode = state.project.chapters.length === 9;
+    if (!isGridMode) {
+      setShowMidCTA(sec >= 150 && sec <= 210);
+      setShowFinalCTA(sec >= 300 && sec <= 360);
+    } else {
+      // Grid Mode: بدون mid CTA
+      setShowMidCTA(false);
+      setShowFinalCTA(false); // final CTA از outro card نمایش داده می‌شود
+    }
   }, [globalElapsedTime, state.project]);
 
   // ─── CHANNEL LOGO ───────────────────────────────────────────────────

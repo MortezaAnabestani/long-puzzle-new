@@ -34,7 +34,7 @@ class EnvironmentRenderer {
 
     offCtx.save();
     // اعمال فیلتر فقط یکبار روی آف‌کانواس
-    offCtx.filter = "blur(40px) saturate(1.1) brightness(0.48)";
+    offCtx.filter = "blur(8px) saturate(1.1) brightness(0.48)";
 
     const scale = Math.max(w / img.width, h / img.height);
     const dw = img.width * scale;
@@ -54,7 +54,7 @@ class EnvironmentRenderer {
     img: HTMLImageElement | null,
     elapsed: number,
     w: number,
-    h: number
+    h: number,
   ) {
     const t = elapsed / 1000;
 

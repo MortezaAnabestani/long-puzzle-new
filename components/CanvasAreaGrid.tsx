@@ -16,6 +16,7 @@ interface CanvasAreaGridProps {
   topicCategory?: string;
   channelLogoUrl: string | null;
   onProgress: (p: number) => void;
+  onChapterChange?: (chapterNum: number) => void; // ✅
   onFinished: () => void;
   showDocumentaryTips?: boolean;
   progress: number;
@@ -34,6 +35,7 @@ const CanvasAreaGrid: React.FC<CanvasAreaGridProps> = ({
   topicCategory,
   channelLogoUrl,
   onProgress,
+  onChapterChange,
   onFinished,
   showDocumentaryTips = false,
   progress,
@@ -96,9 +98,9 @@ const CanvasAreaGrid: React.FC<CanvasAreaGridProps> = ({
                 movement={movement}
                 background={background}
                 topicCategory={topicCategory}
-                engagementGifUrl={null}
                 channelLogoUrl={channelLogoUrl}
                 onProgress={onProgress}
+                onChapterChange={onChapterChange}
                 isSolving={isColoring}
                 onFinished={onFinished}
                 showDocumentaryTips={showDocumentaryTips}

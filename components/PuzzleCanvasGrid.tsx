@@ -2,6 +2,7 @@ import { useRef, useEffect, useState, useCallback, useImperativeHandle, forwardR
 import { PieceShape, PieceMaterial, MovementType, PuzzleBackground, Chapter } from "../types";
 import { Piece } from "../hooks/usePuzzleLogic";
 import { renderPuzzleFrame } from "../utils/puzzleRenderer";
+import { renderOutroCard } from "../utils/outroRenderer";
 import { createPiecesForPanel } from "../utils/gridPuzzleCreator";
 import { FINALE_PAUSE, WAVE_DURATION } from "../utils/finaleManager";
 import { sonicEngine } from "../services/proceduralAudio";
@@ -19,6 +20,7 @@ interface PuzzleCanvasGridProps {
   topicCategory?: string;
   channelLogoUrl: string | null;
   onProgress: (p: number) => void;
+  onChapterChange?: (chapterNum: number) => void; // ✅ برای chapter counter
   isSolving: boolean;
   onFinished: () => void;
   showDocumentaryTips?: boolean;
@@ -36,8 +38,12 @@ const CANVAS_WIDTH = 1920;
 const CANVAS_HEIGHT = 1080;
 const GRID_COLS = 3;
 const GRID_ROWS = 3;
-const PANEL_WIDTH = CANVAS_WIDTH / GRID_COLS;
-const PANEL_HEIGHT = CANVAS_HEIGHT / GRID_ROWS;
+
+// ✅ HIGH RESOLUTION panels برای quality بهتر
+const PANEL_WIDTH = 1280; // بجای 640 (2x resolution)
+const PANEL_HEIGHT = 720; // بجای 360 (2x resolution)
+const PANEL_DISPLAY_WIDTH = CANVAS_WIDTH / GRID_COLS; // 640
+const PANEL_DISPLAY_HEIGHT = CANVAS_HEIGHT / GRID_ROWS; // 360
 
 const CAMERA_PATH = [
   0,
@@ -68,6 +74,7 @@ const PuzzleCanvasGrid = forwardRef<CanvasHandle, PuzzleCanvasGridProps>(
       topicCategory,
       channelLogoUrl,
       onProgress,
+      onChapterChange,
       isSolving,
       onFinished,
       showDocumentaryTips = false,
@@ -78,17 +85,30 @@ const PuzzleCanvasGrid = forwardRef<CanvasHandle, PuzzleCanvasGridProps>(
     const [isReady, setIsReady] = useState(false);
     const [buildProgress, setBuildProgress] = useState(0);
 
-    // Data برای هر panel: {image, pieces}
+    // Data برای هر panel: {image, pieces, chapter}
     const panelDataRef = useRef<
       Array<{
         image: HTMLImageElement;
         pieces: Piece[];
+        chapter: Chapter;
       }>
     >([]);
 
     const animationRef = useRef<number>(0);
     const startTimeRef = useRef<number | null>(null);
     const logoImgRef = useRef<HTMLImageElement | null>(null);
+
+    // ─── CAMERA STATE ──────────────────────────────────────────────
+    const currentPanelRef = useRef(0);
+    const panelStartTimeRef = useRef(0);
+    const cameraStateRef = useRef<"active" | "waiting" | "transitioning">("active");
+    const transitionStartRef = useRef(0);
+
+    // ✅ Completion tracking برای جلوگیری از پرش زودهنگام
+    const panelCompletionRef = useRef<boolean[]>(new Array(9).fill(false));
+
+    // ✅ Camera lerp برای smooth movement
+    const currentCamPosRef = useRef({ x: 960, y: 540, zoom: 2.7 });
 
     // Audio
     const lastIntervalRef = useRef(-1);
@@ -123,16 +143,12 @@ const PuzzleCanvasGrid = forwardRef<CanvasHandle, PuzzleCanvasGridProps>(
       }
 
       console.log("🔄 Loading 9 panels with FULL features...");
-      console.log(`   - Shape: ${shape}`);
-      console.log(`   - Material: ${material}`);
-      console.log(`   - Movement: ${movement}`);
-      console.log(`   - Piece Count: ${pieceCount}`);
 
       setIsReady(false);
       setBuildProgress(0);
 
       let loaded = 0;
-      const tempData: Array<{ image: HTMLImageElement; pieces: Piece[] }> = new Array(9);
+      const tempData: Array<{ image: HTMLImageElement; pieces: Piece[]; chapter: Chapter }> = new Array(9);
 
       chapters.forEach((ch, idx) => {
         if (!ch.imageUrl) return;
@@ -141,13 +157,17 @@ const PuzzleCanvasGrid = forwardRef<CanvasHandle, PuzzleCanvasGridProps>(
         img.crossOrigin = "anonymous";
         img.onload = async () => {
           console.log(`🖼️ Panel ${idx} loading...`);
+          console.log(`   - Shape: ${ch.puzzleConfig.shape}`);
+          console.log(`   - Material: ${ch.puzzleConfig.material}`);
+          console.log(`   - Movement: ${ch.puzzleConfig.movement}`);
+          console.log(`   - Pieces: ${ch.puzzleConfig.pieceCount}`);
 
-          // ساخت قطعات با تمام جزئیات
+          // ✅ استفاده از تنظیمات مخصوص این chapter
           const pieces = await createPiecesForPanel(
             img,
-            pieceCount,
-            shape,
-            material,
+            ch.puzzleConfig.pieceCount, // از chapter
+            ch.puzzleConfig.shape, // از chapter
+            ch.puzzleConfig.material, // از chapter
             PANEL_WIDTH,
             PANEL_HEIGHT,
             (p) => {
@@ -156,7 +176,7 @@ const PuzzleCanvasGrid = forwardRef<CanvasHandle, PuzzleCanvasGridProps>(
             },
           );
 
-          tempData[idx] = { image: img, pieces };
+          tempData[idx] = { image: img, pieces, chapter: ch };
           loaded++;
           console.log(`✅ Panel ${idx} ready: ${pieces.length} pieces`);
 
@@ -172,7 +192,7 @@ const PuzzleCanvasGrid = forwardRef<CanvasHandle, PuzzleCanvasGridProps>(
       return () => {
         clearAllTrails();
       };
-    }, [chapters, pieceCount, shape, material]);
+    }, [chapters]);
 
     // ─── PHYSICS INIT ──────────────────────────────────────────────
     const initPhysics = useCallback(() => {
@@ -187,9 +207,13 @@ const PuzzleCanvasGrid = forwardRef<CanvasHandle, PuzzleCanvasGridProps>(
       const engine = Matter.Engine.create({ gravity: { x: 0, y: 0 } });
       engine.world.gravity.y = 2.0;
 
-      const ground = Matter.Bodies.rectangle(CANVAS_WIDTH / 2, CANVAS_HEIGHT + 500, CANVAS_WIDTH * 10, 1000, {
-        isStatic: true,
-      });
+      const ground = Matter.Bodies.rectangle(
+        CANVAS_WIDTH / 2,
+        CANVAS_HEIGHT - 50, // ✅ درست در پایین صفحه
+        CANVAS_WIDTH * 3,
+        100,
+        { isStatic: true },
+      );
       Matter.World.add(engine.world, [ground]);
       engineRef.current = engine;
       console.log("✅ Physics ready");
@@ -238,8 +262,8 @@ const PuzzleCanvasGrid = forwardRef<CanvasHandle, PuzzleCanvasGridProps>(
         const dy = p.ty + p.ph / 2 - CANVAS_HEIGHT / 2;
         const dist = Math.sqrt(dx * dx + dy * dy) || 1;
         Matter.Body.applyForce(body, body.position, {
-          x: (dx / dist) * 0.16 * Math.random(),
-          y: (dy / dist) * 0.16 * Math.random() - 0.08,
+          x: (dx / dist) * 0.03 * Math.random(), // کاهش از 0.16
+          y: (dy / dist) * 0.03 * Math.random() - 0.02, // کاهش از 0.16 و 0.08
         });
         bodies.push(body);
         bodiesRef.current.set(p.id, body);
@@ -249,37 +273,103 @@ const PuzzleCanvasGrid = forwardRef<CanvasHandle, PuzzleCanvasGridProps>(
       console.log(`💥 Physics activated: ${bodies.length} pieces`);
     }, [getMatter]);
 
-    // ─── CAMERA POSITION ───────────────────────────────────────────
-    const getCameraPos = useCallback((elapsedMs: number, panelDurMs: number) => {
-      const panelIdx = Math.floor(elapsedMs / panelDurMs);
-      const progress = (elapsedMs % panelDurMs) / panelDurMs;
+    // ─── CAMERA STATE MACHINE ──────────────────────────────────────
+    const ACTIVE_ZOOM = 2.7; // 1 panel + 10% اطراف
+    const TRANSITION_ZOOM = 1.2; // overview برای transition
+    const FINAL_ZOOM = 0.95; // کل grid 3×3 (تقریباً تمام صفحه)
 
-      if (panelIdx >= 9) {
-        const last = CAMERA_PATH[8];
-        return {
-          x: (last % GRID_COLS) * PANEL_WIDTH + PANEL_WIDTH / 2,
-          y: Math.floor(last / GRID_COLS) * PANEL_HEIGHT + PANEL_HEIGHT / 2,
-          zoom: 1.15,
-          idx: 8,
-        };
+    // ✅ Lerp helpers برای smooth movement
+    const lerp = useCallback((a: number, b: number, t: number) => a + (b - a) * t, []);
+    const easeInOutCubic = useCallback(
+      (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2),
+      [],
+    );
+
+    const getCameraState = useCallback((elapsed: number, panelDur: number) => {
+      const totalDur = panelDur * 9;
+
+      // Final zoom out (بعد از panel 9)
+      if (elapsed >= totalDur) {
+        const afterComplete = elapsed - totalDur;
+        if (afterComplete < 2000) {
+          // Wait 2s
+          return { x: 960, y: 540, zoom: ACTIVE_ZOOM, panelIdx: 8, state: "waiting" };
+        } else if (afterComplete < 5000) {
+          // Zoom out to show full grid
+          const t = (afterComplete - 2000) / 3000;
+          const zoom = ACTIVE_ZOOM - t * (ACTIVE_ZOOM - FINAL_ZOOM); // 0.9 → 0.4
+          return { x: 960, y: 540, zoom, panelIdx: 8, state: "final_zoom_out" };
+        } else {
+          // Hold full grid view
+          return { x: 960, y: 540, zoom: FINAL_ZOOM, panelIdx: 8, state: "final_view" };
+        }
       }
 
-      const curr = CAMERA_PATH[panelIdx];
-      const next = CAMERA_PATH[Math.min(panelIdx + 1, 8)];
-      const fromCol = curr % GRID_COLS;
-      const fromRow = Math.floor(curr / GRID_COLS);
-      const toCol = next % GRID_COLS;
-      const toRow = Math.floor(next / GRID_COLS);
+      const panelIdx = Math.floor(elapsed / panelDur);
+      const panelElapsed = elapsed % panelDur;
 
-      const ease = (t: number) => (t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2);
-      const e = ease(progress);
+      if (panelIdx >= 9) {
+        return { x: 960, y: 540, zoom: ACTIVE_ZOOM, panelIdx: 8, state: "active" };
+      }
 
-      return {
-        x: (fromCol + (toCol - fromCol) * e) * PANEL_WIDTH + PANEL_WIDTH / 2,
-        y: (fromRow + (toRow - fromRow) * e) * PANEL_HEIGHT + PANEL_HEIGHT / 2,
-        zoom: 1.15,
-        idx: panelIdx,
-      };
+      // محاسبه position این panel در grid
+      const actualIdx = CAMERA_PATH[panelIdx];
+      const col = actualIdx % GRID_COLS;
+      const row = Math.floor(actualIdx / GRID_COLS);
+      const targetX = col * PANEL_DISPLAY_WIDTH + PANEL_DISPLAY_WIDTH / 2;
+      const targetY = row * PANEL_DISPLAY_HEIGHT + PANEL_DISPLAY_HEIGHT / 2;
+
+      // States:
+      // 0-45000ms: active (zoom 90%)
+      // 45000-47000ms: waiting (zoom 90%, hold)
+      // 47000-48000ms: zoom out (90% → 70%)
+      // 48000-48500ms: pan to next
+      // 48500-49000ms: zoom in (70% → 90%)
+
+      if (panelElapsed < 45000) {
+        // Active state
+        return { x: targetX, y: targetY, zoom: ACTIVE_ZOOM, panelIdx, state: "active" };
+      } else if (panelElapsed < 47000) {
+        // Wait 2s
+        return { x: targetX, y: targetY, zoom: ACTIVE_ZOOM, panelIdx, state: "waiting" };
+      } else if (panelElapsed < 48000) {
+        // Zoom out
+        const t = (panelElapsed - 47000) / 1000;
+        const zoom = ACTIVE_ZOOM - t * (ACTIVE_ZOOM - TRANSITION_ZOOM); // 0.9 → 0.7
+        return { x: targetX, y: targetY, zoom, panelIdx, state: "zoom_out" };
+      } else if (panelElapsed < 48500) {
+        // Pan to next panel
+        const nextIdx = Math.min(panelIdx + 1, 8);
+        const nextActualIdx = CAMERA_PATH[nextIdx];
+        const nextCol = nextActualIdx % GRID_COLS;
+        const nextRow = Math.floor(nextActualIdx / GRID_COLS);
+        const nextX = nextCol * PANEL_WIDTH + PANEL_WIDTH / 2;
+        const nextY = nextRow * PANEL_HEIGHT + PANEL_HEIGHT / 2;
+
+        const t = (panelElapsed - 48000) / 500;
+        const ease = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+
+        return {
+          x: targetX + (nextX - targetX) * ease,
+          y: targetY + (nextY - targetY) * ease,
+          zoom: TRANSITION_ZOOM,
+          panelIdx,
+          state: "panning",
+        };
+      } else {
+        // Zoom in
+        const nextIdx = Math.min(panelIdx + 1, 8);
+        const nextActualIdx = CAMERA_PATH[nextIdx];
+        const nextCol = nextActualIdx % GRID_COLS;
+        const nextRow = Math.floor(nextActualIdx / GRID_COLS);
+        const nextX = nextCol * PANEL_WIDTH + PANEL_WIDTH / 2;
+        const nextY = nextRow * PANEL_HEIGHT + PANEL_HEIGHT / 2;
+
+        const t = (panelElapsed - 48500) / 500;
+        const zoom = TRANSITION_ZOOM + t * (ACTIVE_ZOOM - TRANSITION_ZOOM); // 0.7 → 0.9
+
+        return { x: nextX, y: nextY, zoom, panelIdx, state: "zoom_in" };
+      }
     }, []);
 
     // ═══════════════════════════════════════════════════════════════
@@ -315,7 +405,19 @@ const PuzzleCanvasGrid = forwardRef<CanvasHandle, PuzzleCanvasGridProps>(
         }
 
         // ─── CAMERA ────────────────────────────────────────────────
-        const cam = getCameraPos(elapsed, panelDur);
+        const cam = getCameraState(elapsed, panelDur);
+
+        // ✅ Chapter counter update
+        const currentChapter = Math.min(cam.panelIdx + 1, 9);
+        if (onChapterChange) {
+          onChapterChange(currentChapter);
+        }
+
+        // ✅ Smooth camera interpolation با lerp
+        const LERP_SPEED = 0.12;
+        currentCamPosRef.current.x = lerp(currentCamPosRef.current.x, cam.x, LERP_SPEED);
+        currentCamPosRef.current.y = lerp(currentCamPosRef.current.y, cam.y, LERP_SPEED);
+        currentCamPosRef.current.zoom = lerp(currentCamPosRef.current.zoom, cam.zoom, LERP_SPEED);
 
         // ─── FINALE ────────────────────────────────────────────────
         const afterFinish = Math.max(0, elapsed - totalDur);
@@ -329,7 +431,18 @@ const PuzzleCanvasGrid = forwardRef<CanvasHandle, PuzzleCanvasGridProps>(
           activatePhysics();
         }
 
-        if (isPhysicsActiveRef.current && elapsed >= explodeTime + 10000) {
+        // ✅ FINISH با debug logging
+        const finishTime = explodeTime + 15000; // 15s بعد از physics
+
+        // Debug every 5 seconds
+        if (Math.floor(elapsed / 5000) > Math.floor((elapsed - 16.666) / 5000)) {
+          console.log(
+            `⏱️ Timing: elapsed=${Math.floor(elapsed / 1000)}s, totalDur=${Math.floor(totalDur / 1000)}s, explodeTime=${Math.floor(explodeTime / 1000)}s, finishTime=${Math.floor(finishTime / 1000)}s, isPhysics=${isPhysicsActiveRef.current}`,
+          );
+        }
+
+        if (isPhysicsActiveRef.current && elapsed >= finishTime) {
+          console.log(`🎬 FINISHING VIDEO! elapsed=${elapsed}, finishTime=${finishTime}`);
           onFinished();
           return;
         }
@@ -350,25 +463,67 @@ const PuzzleCanvasGrid = forwardRef<CanvasHandle, PuzzleCanvasGridProps>(
         const ctx = canvasRef.current?.getContext("2d", { alpha: false });
         if (!ctx) return;
 
+        // ✅ CLEAR main canvas
         ctx.fillStyle = "#000";
         ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
 
-        // رندر هر panel با renderPuzzleFrame
+        // Safety check
+        if (!panelDataRef.current || panelDataRef.current.length === 0) {
+          console.error("❌ panelDataRef is empty");
+          return;
+        }
+
+        // رندر panels مرتبط (برای performance)
+        const activePanel = cam.panelIdx;
+
+        // ✅ Optimization: فقط active + همسایه‌ها + completed panels
+        const shouldRenderPanel = (idx: number) => {
+          if (idx < activePanel) return true; // completed panels
+          if (idx === activePanel) return true; // active
+          if (idx === activePanel + 1) return true; // next (برای smooth transition)
+          return false;
+        };
+
         panelDataRef.current.forEach((panel, panelIdx) => {
+          if (!panel || !panel.image || !panel.pieces || !panel.chapter) {
+            return;
+          }
+
+          if (!shouldRenderPanel(panelIdx)) {
+            return; // skip این panel
+          }
+
           const actualIdx = CAMERA_PATH[panelIdx];
           const col = actualIdx % GRID_COLS;
           const row = Math.floor(actualIdx / GRID_COLS);
-          const offsetX = col * PANEL_WIDTH;
-          const offsetY = row * PANEL_HEIGHT;
+          const offsetX = col * PANEL_DISPLAY_WIDTH; // برای positioning در grid
+          const offsetY = row * PANEL_DISPLAY_HEIGHT;
 
-          const panelElapsed = Math.max(0, elapsed - panelIdx * panelDur);
-          const isActive = panelIdx === cam.idx;
+          // محاسبه elapsed برای این panel
+          // panel فعلی: از 0 تا totalDuration
+          // panels دیگر: 0 (شروع نشده) یا totalDuration (تمام شده)
+          let panelElapsed: number;
+          if (panelIdx < activePanel) {
+            panelElapsed = panelDur; // تمام شده - نمایش completed state
+          } else if (panelIdx === activePanel) {
+            // محاسبه elapsed واقعی
+            const panelStartTime = panelIdx * panelDur; // ✅ استفاده از panelDur
+            panelElapsed = Math.max(0, Math.min(elapsed - panelStartTime, panelDur));
+          } else {
+            panelElapsed = 0; // شروع نشده
+          }
 
-          // Canvas موقت برای panel
+          const isActive = panelIdx === activePanel;
+
+          // Canvas موقت برای panel با HIGH RESOLUTION
           const panelCanvas = document.createElement("canvas");
-          panelCanvas.width = PANEL_WIDTH;
-          panelCanvas.height = PANEL_HEIGHT;
+          panelCanvas.width = PANEL_WIDTH; // 1280 (high res)
+          panelCanvas.height = PANEL_HEIGHT; // 720 (high res)
           const panelCtx = panelCanvas.getContext("2d", { alpha: false })!;
+
+          // ✅ High quality rendering
+          panelCtx.imageSmoothingEnabled = true;
+          panelCtx.imageSmoothingQuality = "high";
 
           // 🔥 استفاده کامل از renderPuzzleFrame با تمام features
           renderPuzzleFrame({
@@ -377,16 +532,31 @@ const PuzzleCanvasGrid = forwardRef<CanvasHandle, PuzzleCanvasGridProps>(
             pieces: panel.pieces,
             elapsed: panelElapsed,
             totalDuration: panelDur,
-            shape, // 🔥 Shape واقعی
-            movement, // 🔥 Movement واقعی (FLIGHT, VORTEX, etc.)
-            background, // 🔥 Background واقعی
+            shape: panel.chapter.puzzleConfig.shape,
+            movement: panel.chapter.puzzleConfig.movement,
+            background,
             particles: [],
             physicsPieces: isPhysicsActiveRef.current ? physicsMap : undefined,
-            narrativeText: isActive && showDocumentaryTips ? chapters[panelIdx].narrativeText : "",
+            narrativeText: isActive && showDocumentaryTips ? panel.chapter.narrativeText : "",
             channelLogo: logoImgRef.current || undefined,
+            canvasWidth: PANEL_WIDTH,
+            canvasHeight: PANEL_HEIGHT,
           });
 
-          ctx.drawImage(panelCanvas, offsetX, offsetY);
+          // ✅ Scale down with high quality
+          ctx.imageSmoothingEnabled = true;
+          ctx.imageSmoothingQuality = "high";
+          ctx.drawImage(
+            panelCanvas,
+            0,
+            0,
+            PANEL_WIDTH,
+            PANEL_HEIGHT, // source (high res)
+            offsetX,
+            offsetY,
+            PANEL_DISPLAY_WIDTH,
+            PANEL_DISPLAY_HEIGHT, // dest (display size)
+          );
         });
 
         // Camera Viewport
@@ -401,10 +571,22 @@ const PuzzleCanvasGrid = forwardRef<CanvasHandle, PuzzleCanvasGridProps>(
 
         ctx.save();
         ctx.translate(CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2);
-        ctx.scale(cam.zoom, cam.zoom);
-        ctx.translate(-cam.x, -cam.y);
+        ctx.scale(currentCamPosRef.current.zoom, currentCamPosRef.current.zoom);
+        ctx.translate(-currentCamPosRef.current.x, -currentCamPosRef.current.y);
         ctx.drawImage(tempCanvas, 0, 0);
         ctx.restore();
+
+        // ─── OUTRO CARD (فقط در انتهای واقعی) ──────────────────────────
+        const showOutro = isPhysicsActiveRef.current && elapsed >= finishTime - 2000; // 2s قبل از finish
+        if (showOutro) {
+          renderOutroCard({
+            ctx,
+            vWidth: CANVAS_WIDTH,
+            vHeight: CANVAS_HEIGHT,
+            elapsedAfterFinish: elapsed - totalDur,
+            channelLogo: logoImgRef.current || undefined,
+          });
+        }
 
         onProgress((Math.min(elapsed, totalDur) / totalDur) * 100);
 
@@ -414,16 +596,13 @@ const PuzzleCanvasGrid = forwardRef<CanvasHandle, PuzzleCanvasGridProps>(
         isSolving,
         isReady,
         durationPerChapterSeconds,
-        shape,
-        movement,
         background,
         onProgress,
         onFinished,
-        getCameraPos,
+        getCameraState,
         activatePhysics,
         getMatter,
         showDocumentaryTips,
-        chapters,
         initPhysics,
       ],
     );

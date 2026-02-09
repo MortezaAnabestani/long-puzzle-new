@@ -19,6 +19,8 @@ export interface RenderOptions {
   narrativeText?: string;
   channelLogo?: HTMLImageElement;
   completedPuzzleSnapshots?: HTMLImageElement[]; // 🔥 برای اسلایدشو
+  canvasWidth?: number;
+  canvasHeight?: number;
 }
 
 // ─── 🔥 PHASE A FIX: CACHED SORTING ───────────────────────────────────
@@ -71,7 +73,7 @@ const calculateKineticTransform = (
   t: number,
   movement: MovementType,
   vWidth: number,
-  vHeight: number
+  vHeight: number,
 ) => {
   const baseX = p.cx + (p.tx + p.pw / 2 - p.cx) * t;
   const baseY = p.cy + (p.ty + p.ph / 2 - p.cy) * t;
@@ -137,9 +139,11 @@ export const renderPuzzleFrame = ({
   narrativeText = "",
   channelLogo,
   completedPuzzleSnapshots,
+  canvasWidth,
+  canvasHeight,
 }: RenderOptions): number => {
-  const vWidth = 1080;
-  const vHeight = 2280;
+  const vWidth = canvasWidth || 1080;
+  const vHeight = canvasHeight || 2280;
   const totalPieces = pieces.length;
   if (totalPieces === 0) return 0;
 
@@ -180,7 +184,7 @@ export const renderPuzzleFrame = ({
       ctx.fillText(
         `${fState.currentSlide + 1} / ${completedPuzzleSnapshots.length}`,
         vWidth / 2,
-        vHeight - 150
+        vHeight - 150,
       );
 
       ctx.restore();
@@ -306,38 +310,84 @@ export const renderPuzzleFrame = ({
 
     if (displayText) {
       ctx.save();
-      const boxW = vWidth * 0.92;
-      const boxX = (vWidth - boxW) / 2;
-      const boxY = vHeight * 0.74;
 
-      ctx.font = "bold 32px Inter, sans-serif";
-      const lines = wrapText(ctx, displayText, boxW - 140);
-      const lineHeight = 54;
-      const boxH = 140 + lines.length * lineHeight; // 🔥 Removed label, reduced height
+      // ✅ تشخیص horizontal panel (for grid mode)
+      const isHorizontal = vWidth > vHeight;
+      const isGridPanel = vWidth <= 1300 && isHorizontal; // grid panels are 1280x720
 
-      const floatY = Math.sin(elapsed / 600) * 8;
-      ctx.translate(0, floatY);
+      if (isGridPanel) {
+        // تنظیمات برای grid panel horizontal (1280x720)
+        const boxW = vWidth * 0.7; // کاهش عرض از 0.85 به 0.70
+        const boxX = (vWidth - boxW) / 2;
+        const boxY = vHeight * 0.68; // پایین‌تر: از 0.50 به 0.68
 
-      // Glass Box Style
-      const grad = ctx.createLinearGradient(0, boxY, 0, boxY + boxH);
-      grad.addColorStop(0, "rgba(15, 20, 45, 0.95)");
-      grad.addColorStop(1, "rgba(5, 5, 20, 0.98)");
-      ctx.fillStyle = grad;
-      ctx.roundRect(boxX, boxY, boxW, boxH, 50);
-      ctx.fill();
+        const fontSize = Math.floor(vHeight * 0.042); // کمی کوچکتر
+        ctx.font = `bold ${fontSize}px Inter, sans-serif`;
 
-      ctx.strokeStyle = "rgba(100, 180, 255, 0.4)";
-      ctx.lineWidth = 4;
-      ctx.stroke();
+        const padding = Math.floor(vHeight * 0.025);
+        const lines = wrapText(ctx, displayText, boxW - padding * 2);
+        const lineHeight = fontSize * 1.3;
+        const boxH = padding * 2.5 + lines.length * lineHeight;
 
-      // 🔥 REMOVED LABEL - cleaner look for YouTube
+        // اطمینان از اینکه box داخل canvas است
+        const safeBoxY = Math.min(boxY, vHeight - boxH - 15);
 
-      // Content Text
-      ctx.fillStyle = "#ffffff";
-      ctx.font = "bold 32px Inter, sans-serif";
-      lines.forEach((line, i) => {
-        ctx.fillText(line, boxX + 70, boxY + 85 + i * lineHeight); // Adjusted Y offset
-      });
+        const floatY = Math.sin(elapsed / 600) * 3;
+        ctx.translate(0, floatY);
+
+        // Glass Box Style - شیشه‌ای‌تر
+        const grad = ctx.createLinearGradient(0, safeBoxY, 0, safeBoxY + boxH);
+        grad.addColorStop(0, "rgba(15, 20, 45, 0.75)"); // کاهش opacity از 0.92
+        grad.addColorStop(1, "rgba(5, 5, 20, 0.85)"); // کاهش opacity از 0.95
+        ctx.fillStyle = grad;
+        ctx.roundRect(boxX, safeBoxY, boxW, boxH, 15);
+        ctx.fill();
+
+        // Border شیشه‌ای
+        ctx.strokeStyle = "rgba(255, 255, 255, 0.25)"; // border روشن‌تر
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+
+        // Content Text
+        ctx.fillStyle = "#ffffff";
+        ctx.font = `bold ${fontSize}px Inter, sans-serif`;
+        lines.forEach((line, i) => {
+          const textY = safeBoxY + padding * 1.5 + i * lineHeight;
+          ctx.fillText(line, boxX + padding, textY);
+        });
+      } else {
+        // تنظیمات برای vertical/large panels (original)
+        const boxW = vWidth * 0.92;
+        const boxX = (vWidth - boxW) / 2;
+        const boxY = vHeight * 0.74;
+
+        ctx.font = "bold 32px Inter, sans-serif";
+        const lines = wrapText(ctx, displayText, boxW - 140);
+        const lineHeight = 54;
+        const boxH = 140 + lines.length * lineHeight;
+
+        const floatY = Math.sin(elapsed / 600) * 8;
+        ctx.translate(0, floatY);
+
+        // Glass Box Style
+        const grad = ctx.createLinearGradient(0, boxY, 0, boxY + boxH);
+        grad.addColorStop(0, "rgba(15, 20, 45, 0.95)");
+        grad.addColorStop(1, "rgba(5, 5, 20, 0.98)");
+        ctx.fillStyle = grad;
+        ctx.roundRect(boxX, boxY, boxW, boxH, 50);
+        ctx.fill();
+
+        ctx.strokeStyle = "rgba(100, 180, 255, 0.4)";
+        ctx.lineWidth = 4;
+        ctx.stroke();
+
+        // Content Text
+        ctx.fillStyle = "#ffffff";
+        ctx.font = "bold 32px Inter, sans-serif";
+        lines.forEach((line, i) => {
+          ctx.fillText(line, boxX + 70, boxY + 85 + i * lineHeight);
+        });
+      }
 
       ctx.restore();
     }
