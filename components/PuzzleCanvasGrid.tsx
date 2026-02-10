@@ -515,6 +515,13 @@ const PuzzleCanvasGrid = forwardRef<CanvasHandle, PuzzleCanvasGridProps>(
 
           const isActive = panelIdx === activePanel;
 
+          // 🐛 DEBUG: log panel info
+          if (panelIdx === 0 || panelIdx === 1) {
+            console.log(
+              `Panel ${panelIdx}: pieces=${panel.pieces.length}, elapsed=${Math.floor(panelElapsed)}, offsetX=${offsetX}, offsetY=${offsetY}`,
+            );
+          }
+
           // Canvas موقت برای panel با HIGH RESOLUTION
           const panelCanvas = document.createElement("canvas");
           panelCanvas.width = PANEL_WIDTH; // 1280 (high res)
@@ -542,6 +549,15 @@ const PuzzleCanvasGrid = forwardRef<CanvasHandle, PuzzleCanvasGridProps>(
             canvasWidth: PANEL_WIDTH,
             canvasHeight: PANEL_HEIGHT,
           });
+
+          // 🐛 DEBUG: بررسی اینکه piece position ها درست هستند
+          if (panelIdx <= 1 && Math.random() < 0.01) {
+            // فقط 1% frames
+            const samplePiece = panel.pieces[0];
+            console.log(
+              `Panel ${panelIdx}, Piece 0: tx=${samplePiece.tx}, ty=${samplePiece.ty}, cx=${samplePiece.cx}, cy=${samplePiece.cy}`,
+            );
+          }
 
           // ✅ Scale down with high quality
           ctx.imageSmoothingEnabled = true;

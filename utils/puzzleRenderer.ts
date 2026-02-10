@@ -75,6 +75,10 @@ const calculateKineticTransform = (
   vWidth: number,
   vHeight: number,
 ) => {
+  // ✅ Scale movement for horizontal/grid panels
+  const isHorizontal = vWidth > vHeight;
+  const scaleFactor = isHorizontal ? 0.5 : 1.0; // کاهش 50% برای horizontal
+
   const baseX = p.cx + (p.tx + p.pw / 2 - p.cx) * t;
   const baseY = p.cy + (p.ty + p.ph / 2 - p.cy) * t;
   let x = baseX;
@@ -84,29 +88,29 @@ const calculateKineticTransform = (
 
   switch (movement) {
     case MovementType.FLIGHT:
-      const arcHeight = Math.sin(t * Math.PI) * 550;
+      const arcHeight = Math.sin(t * Math.PI) * 550 * scaleFactor;
       y -= arcHeight;
       rot += Math.cos(t * Math.PI) * 0.6;
       scale = 1 + Math.sin(t * Math.PI) * 0.45;
       break;
     case MovementType.VORTEX:
       const angle = (1 - t) * Math.PI * 6;
-      const radius = (1 - t) * 850;
+      const radius = (1 - t) * 850 * scaleFactor;
       x += Math.cos(angle) * radius;
       y += Math.sin(angle) * radius;
       rot += angle;
       scale = 0.4 + t * 0.6;
       break;
     case MovementType.WAVE:
-      const swellY = Math.sin(t * Math.PI * 2.5) * 110;
-      const swellX = Math.cos(t * Math.PI * 2.5) * 60;
+      const swellY = Math.sin(t * Math.PI * 2.5) * 110 * scaleFactor;
+      const swellX = Math.cos(t * Math.PI * 2.5) * 60 * scaleFactor;
       x += swellX;
       y += swellY;
       rot += Math.sin(t * Math.PI * 1.5) * 0.35;
       scale = 1 + Math.sin(t * Math.PI) * 0.15;
       break;
     case MovementType.PLAYFUL:
-      const bounce = Math.abs(Math.sin(t * Math.PI * 4)) * (1 - t) * 380;
+      const bounce = Math.abs(Math.sin(t * Math.PI * 4)) * (1 - t) * 380 * scaleFactor;
       y -= bounce;
       const squash = 1 + Math.sin(t * Math.PI * 8) * 0.12 * (1 - t);
       scale = squash;
