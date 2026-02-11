@@ -2,7 +2,7 @@ import { useRef, useEffect, useState, useCallback, useImperativeHandle, forwardR
 import { PieceShape, PieceMaterial, MovementType, PuzzleBackground } from "../types";
 import { usePuzzleLogic } from "../hooks/usePuzzleLogic";
 import { renderPuzzleFrame } from "../utils/puzzleRenderer";
-import { FINALE_PAUSE, WAVE_DURATION } from "../utils/finaleManager";
+import { FINALE_PAUSE } from "../utils/finaleManager";
 import { sonicEngine } from "../services/proceduralAudio";
 import { clearAllTrails } from "../utils/trailEffects";
 import PuzzleOverlay from "./puzzle/PuzzleOverlay";
@@ -62,7 +62,7 @@ const PuzzleCanvas = forwardRef<CanvasHandle, PuzzleCanvasProps>(
       isTransitioning,
       completedPuzzleSnapshots,
     },
-    ref
+    ref,
   ) => {
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const [isReady, setIsReady] = useState(false);
@@ -276,7 +276,7 @@ const PuzzleCanvas = forwardRef<CanvasHandle, PuzzleCanvasProps>(
                 isTransitioningRef.current = false;
                 onTransitionComplete();
               }, 100);
-            }
+            },
           );
         }
       }
@@ -381,7 +381,7 @@ const PuzzleCanvas = forwardRef<CanvasHandle, PuzzleCanvasProps>(
               vWidth,
               vHeight,
               engineRef.current,
-              piecesWithImage // ✅ پاس دادن قطعات با تصویر
+              piecesWithImage, // ✅ پاس دادن قطعات با تصویر
             );
           } else {
             // Normal render
@@ -430,7 +430,7 @@ const PuzzleCanvas = forwardRef<CanvasHandle, PuzzleCanvasProps>(
         vWidth,
         vHeight,
         completedPuzzleSnapshots,
-      ]
+      ],
     );
 
     // ─── LOOP LIFECYCLE ─────────────────────────────────────────────
@@ -463,7 +463,7 @@ const PuzzleCanvas = forwardRef<CanvasHandle, PuzzleCanvasProps>(
         />
       </div>
     );
-  }
+  },
 );
 
 PuzzleCanvas.displayName = "PuzzleCanvas";

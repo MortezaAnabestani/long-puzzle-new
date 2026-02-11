@@ -6,10 +6,7 @@ import {
   DEFAULT_TRANSITION_CONFIG,
 } from "./transitionTypes";
 
-import { vortexEffect } from "./effects/vortexEffect";
-import { wreckingBallEffect } from "./effects/wreckingBallEffect";
-import { wallCollapseEffect } from "./effects/wallCollapseEffect";
-import { ufoAbductionEffect } from "./effects/ufoAbductionEffect";
+import { windEffect } from "./effects/windEffect";
 
 class TransitionEngine {
   private effects: Map<TransitionType, TransitionEffect>;
@@ -23,10 +20,7 @@ class TransitionEngine {
   constructor() {
     this.config = { ...DEFAULT_TRANSITION_CONFIG };
     this.effects = new Map([
-      [TransitionType.TORNADO, vortexEffect],
-      [TransitionType.EXPLOSION, wreckingBallEffect],
-      [TransitionType.COLLAPSE, wallCollapseEffect],
-      [TransitionType.MAGNET, ufoAbductionEffect],
+      [TransitionType.WIND, windEffect], // 🌬️ Three-phase wind transition
     ]);
   }
 
@@ -56,7 +50,7 @@ class TransitionEngine {
     canvasWidth: number,
     canvasHeight: number,
     effect?: TransitionEffect,
-    onComplete?: () => void
+    onComplete?: () => void,
   ): () => void {
     const selectedEffect = effect || this.getRandomEffect();
     this.currentEngine = engine;
@@ -65,7 +59,7 @@ class TransitionEngine {
 
     console.log(`🎬 [Transition] Starting ${selectedEffect.type} effect IMMEDIATELY`);
 
-    // ✅ بدون تأخیر! بلافاصله شروع می‌شود
+    // بلافاصله شروع می‌شود
     selectedEffect.apply(pieces, engine, canvasWidth, canvasHeight);
 
     // Store transition info for rendering
@@ -115,6 +109,11 @@ class TransitionEngine {
       this.lastUpdateTime = currentTime;
 
       // Update Matter.js engine
+      // Apply wind forces if wind effect is active
+      if ((this.currentEngine as any)._windForceApplier) {
+        (this.currentEngine as any)._windForceApplier();
+      }
+
       Matter.Engine.update(this.currentEngine, deltaTime);
 
       this.animationFrameId = requestAnimationFrame(updateLoop);
@@ -176,8 +175,8 @@ class TransitionEngine {
     const bodies = Matter.Composite.allBodies(this.currentEngine.world);
 
     bodies.forEach((body: any, index: number) => {
-      // نادیده گرفتن توپ ویرانگر (شناسه خاصی ندارد)
-      if (body.circleRadius) return;
+      // نادیده گرفتن اجسام استاتیک (دیوارها و توپ‌های ویرانگر)
+      if (body.isStatic || (body as any)._isBall) return;
 
       dataMap.set(index, {
         x: body.position.x,

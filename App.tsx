@@ -86,7 +86,7 @@ const AppContent: React.FC = () => {
       setMusicTracks((prev) => [...prev, newTrack]);
       setSelectedTrackId(newTrack.id);
     },
-    []
+    [],
   );
 
   // ─── PIPELINE HOOK ──────────────────────────────────────────────────
@@ -107,7 +107,7 @@ const AppContent: React.FC = () => {
     setActiveTrackName,
     handleAddCloudTrack,
     audioRef,
-    musicBufferRef
+    musicBufferRef,
   );
 
   // ─── DERIVED STATE ──────────────────────────────────────────────────
@@ -191,7 +191,7 @@ const AppContent: React.FC = () => {
             ...s.project,
             status: ProjectStatus.COMPLETED,
             chapters: s.project.chapters.map((ch, i) =>
-              i === s.currentChapterIndex ? { ...ch, status: ChapterStatus.COMPLETED } : ch
+              i === s.currentChapterIndex ? { ...ch, status: ChapterStatus.COMPLETED } : ch,
             ),
           },
         };
@@ -222,7 +222,7 @@ const AppContent: React.FC = () => {
     });
   }, [setState]);
 
-  // ─── ✅ PUZZLE FINISHED ─────────────────────────────────────────────
+  // ─── ✅ PUZZLE FINISHED - FIXED ────────────────────────────────────
   const handlePuzzleFinished = useCallback(() => {
     console.log(`🏁 [App] handlePuzzleFinished - chapter ${state.currentChapterIndex + 1}`);
 
@@ -247,19 +247,27 @@ const AppContent: React.FC = () => {
       if (!s.project) return s;
 
       const nextIndex = s.currentChapterIndex + 1;
+      const isCurrentlyLastChapter = s.currentChapterIndex === s.project.chapters.length - 1;
 
-      // ✅ اگر آخرین فصل بود، فقط return
-      if (nextIndex >= s.project.chapters.length) {
-        console.log(`🏁 [App] Last chapter - no transition`);
+      // ✅ FIX: اگر الان آخرین فصل است (فصل 9)
+      if (isCurrentlyLastChapter) {
+        console.log(
+          `🏁 [App] Last chapter (${s.currentChapterIndex + 1}) finished - finale will handle rest`,
+        );
+        // فقط وضعیت را به‌روز کن، onFinished را PuzzleCanvas صدا می‌زند
         return s;
       }
 
-      // ✅ شروع transition
-      console.log(`🎬 [App] Starting transition for chapter ${nextIndex + 1}`);
-      return {
-        ...s,
-        isTransitioning: true,
-      };
+      // ✅ اگر هنوز فصل دیگری باقی مانده
+      if (nextIndex < s.project.chapters.length) {
+        console.log(`🎬 [App] Starting transition for chapter ${nextIndex + 1}`);
+        return {
+          ...s,
+          isTransitioning: true,
+        };
+      }
+
+      return s;
     });
   }, [setState, state.project, state.currentChapterIndex]);
 
@@ -286,7 +294,7 @@ const AppContent: React.FC = () => {
             ...s.project,
             status: ProjectStatus.PLAYING,
             chapters: s.project.chapters.map((ch, i) =>
-              i === s.currentChapterIndex ? { ...ch, status: ChapterStatus.PLAYING } : ch
+              i === s.currentChapterIndex ? { ...ch, status: ChapterStatus.PLAYING } : ch,
             ),
           },
         };
@@ -332,7 +340,6 @@ const AppContent: React.FC = () => {
       )}
 
       {/* ✅ TRANSITION OVERLAY - نمایش بعد از ترنزیشن */}
-      {/* این overlay فقط برای نمایش اطلاعات فصل بعدیه، نه خود ترنزیشن */}
       {showChapterInfo &&
         state.project &&
         (() => {

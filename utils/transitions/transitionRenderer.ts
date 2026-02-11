@@ -1,8 +1,9 @@
 /**
- * 🎨 TRANSITION RENDERER - FIXED
+ * 🎨 TRANSITION RENDERER PRO - UPGRADED
  *
- * رندر کردن افکت‌های ترنزیشن با پشتیبانی از فیزیک Matter.js
- * شامل: رندر قطعات، افکت‌های بصری، و fade out نهایی
+ * رندر کردن افکت‌های ترنزیشن با پشتیبانی کامل از فیزیک Matter.js
+ * شامل: رندر قطعات، افکت‌های بصری پیشرفته، و fade out نهایی
+ * بهینه‌سازی شده برای جذابیت بصری و سرگرمی
  */
 
 export const renderTransition = (
@@ -12,26 +13,29 @@ export const renderTransition = (
   canvasWidth: number,
   canvasHeight: number,
   engine: any, // Matter.js engine
-  pieces: any[] // آرایه قطعات اصلی برای رندر
+  pieces: any[], // آرایه قطعات اصلی برای رندر
 ): void => {
   if (progress >= 1) return;
 
   switch (transitionType) {
+    case "WIND":
+      renderWind(ctx, progress, canvasWidth, canvasHeight, engine, pieces);
+      break;
     case "VORTEX":
       renderVortex(ctx, progress, canvasWidth, canvasHeight, engine, pieces);
       break;
     case "WRECKING_BALL":
       renderWreckingBall(ctx, progress, canvasWidth, canvasHeight, engine, pieces);
       break;
-    case "WALL_COLLAPSE":
-      renderWallCollapse(ctx, progress, canvasWidth, canvasHeight, engine, pieces);
+    case "CENTRIFUGE":
+      renderCentrifuge(ctx, progress, canvasWidth, canvasHeight, engine, pieces);
       break;
-    case "UFO_ABDUCTION":
-      renderUfoAbduction(ctx, progress, canvasWidth, canvasHeight, engine, pieces);
+    case "REVERSE_GRAVITY":
+      renderReverseGravity(ctx, progress, canvasWidth, canvasHeight, engine, pieces);
       break;
   }
 
-  // Fade out نهایی (در 20% آخر ترنزیشن)
+  // ✅ Fade out نهایی - فقط در آخرین 1 ثانیه (20% آخر از 5 ثانیه)
   if (progress > 0.8) {
     const fadeProgress = (progress - 0.8) / 0.2; // 0 to 1
     ctx.globalAlpha = fadeProgress;
@@ -42,7 +46,174 @@ export const renderTransition = (
 };
 
 // ═══════════════════════════════════════════════════════════════════════════
-// 🌪️ VORTEX EFFECT RENDERER
+// 🌬️ WIND EFFECT RENDERER - Three-Phase Wind Transition
+// ═══════════════════════════════════════════════════════════════════════════
+/**
+ * 🎨 WIND RENDERER - FINAL VERSION
+ *
+ * ✅ استفاده از cachedCanvas برای حفظ شکل دقیق قطعات
+ * ✅ بدون تغییر اندازه
+ * ✅ رندر با اندازه اصلی
+ */
+
+// این کد باید در فایل transitionRenderer.ts، تابع renderWind را جایگزین کند
+
+const renderWind = (
+  ctx: CanvasRenderingContext2D,
+  progress: number,
+  width: number,
+  height: number,
+  engine: any,
+  pieces: any[],
+): void => {
+  if (!engine || typeof window === "undefined") return;
+  const Matter = (window as any).Matter;
+  if (!Matter) return;
+
+  const bodies = Matter.Composite.allBodies(engine.world);
+  const windDirection = (engine as any)._windDirection || 1;
+
+  ctx.save();
+
+  // 🌬️ خطوط باد
+  let windLineOpacity = 0;
+  let windLineCount = 5;
+  let windLineSpeed = 1;
+
+  if (progress < 0.3) {
+    windLineOpacity = 0.06 + progress * 0.2;
+    windLineCount = 2;
+    windLineSpeed = 0.6;
+  } else if (progress < 0.7) {
+    windLineOpacity = 0.1 + (progress - 0.3) * 0.15;
+    windLineCount = 4;
+    windLineSpeed = 1.2;
+  } else {
+    windLineOpacity = 0.12 + (progress - 0.7) * 0.18;
+    windLineCount = 7;
+    windLineSpeed = 2.5;
+  }
+
+  ctx.strokeStyle = `rgba(220, 235, 255, ${windLineOpacity})`;
+  ctx.lineWidth = 1.2;
+  ctx.lineCap = "round";
+
+  for (let i = 0; i < windLineCount; i++) {
+    const baseY = (height / (windLineCount + 1)) * (i + 1);
+    const y = baseY + ((progress * 60 * windLineSpeed) % (height / windLineCount));
+    const waveOffset = Math.sin(progress * Math.PI * 2.5 + i * 0.7) * 12;
+
+    ctx.beginPath();
+
+    const startX = windDirection > 0 ? -40 : width + 40;
+    const endX = windDirection > 0 ? width + 120 : -120;
+
+    const segments = 20;
+    for (let j = 0; j <= segments; j++) {
+      const t = j / segments;
+      const x = startX + (endX - startX) * t;
+      const wave1 = Math.sin(t * Math.PI * 2 + progress * Math.PI * 3) * waveOffset;
+      const wave2 = Math.sin(t * Math.PI * 3.5 + progress * Math.PI * 1.8) * (waveOffset * 0.25);
+      const yOffset = wave1 + wave2;
+
+      if (j === 0) ctx.moveTo(x, y + yOffset);
+      else ctx.lineTo(x, y + yOffset);
+    }
+
+    ctx.stroke();
+  }
+
+  // 🍃 ذرات کوچک
+  if (progress > 0.2) {
+    const particleOpacity = Math.min(0.25, (progress - 0.2) * 0.5);
+    const particleCount = Math.floor(progress * 12);
+
+    for (let i = 0; i < particleCount; i++) {
+      const seed = i * 157.3891;
+      const particleProgress = (progress * 1.8 + seed * 0.08) % 1;
+
+      const startX = windDirection > 0 ? -40 : width + 40;
+      const x = startX + windDirection * particleProgress * (width + 80);
+      const y = (seed * 11.3) % height;
+      const size = 0.8 + (seed % 1.5);
+
+      const alpha = particleOpacity * (1 - Math.abs(particleProgress - 0.5) * 2);
+      ctx.fillStyle = `rgba(200, 215, 230, ${alpha})`;
+
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.rotate(progress * Math.PI * 2.5 + seed);
+      ctx.beginPath();
+      ctx.arc(0, 0, size, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
+  }
+
+  // ✅ رندر قطعات با اندازه دقیق
+  bodies.forEach((body: any) => {
+    if (body.isStatic) return;
+
+    const pieceId = body.pieceId;
+    const piece = pieces.find((p: any) => p.id === pieceId);
+    if (!piece) return;
+
+    ctx.save();
+
+    // opacity بر اساس خروج از صفحه
+    let opacity = 1;
+    const fadeMargin = 200;
+
+    if (body.position.x < -fadeMargin || body.position.x > width + fadeMargin) {
+      const distance =
+        body.position.x < 0
+          ? Math.abs(body.position.x + fadeMargin)
+          : Math.abs(body.position.x - width - fadeMargin);
+      opacity = Math.max(0, 1 - distance / fadeMargin);
+    }
+
+    if (body.position.y < -fadeMargin) {
+      const distance = Math.abs(body.position.y + fadeMargin);
+      opacity = Math.min(opacity, Math.max(0, 1 - distance / fadeMargin));
+    }
+
+    ctx.globalAlpha = opacity;
+    ctx.translate(body.position.x, body.position.y);
+    ctx.rotate(body.angle);
+
+    // ✅ CRITICAL: استفاده از cachedCanvas برای حفظ شکل دقیق
+    if (piece.cachedCanvas) {
+      // رندر با canvas ذخیره شده که شکل دقیق پازل را دارد
+      ctx.drawImage(
+        piece.cachedCanvas,
+        -piece.pw / 2, // ✅ دقیقاً همان اندازه اصلی
+        -piece.ph / 2, // ✅ دقیقاً همان اندازه اصلی
+        piece.pw, // ✅ عرض اصلی بدون تغییر
+        piece.ph, // ✅ ارتفاع اصلی بدون تغییر
+      );
+    } else if (piece.img) {
+      // fallback: استفاده از تصویر اصلی
+      ctx.drawImage(
+        piece.img,
+        piece.sx,
+        piece.sy,
+        piece.sw,
+        piece.sh,
+        -piece.pw / 2, // ✅ دقیقاً همان اندازه اصلی
+        -piece.ph / 2, // ✅ دقیقاً همان اندازه اصلی
+        piece.pw, // ✅ عرض اصلی بدون تغییر
+        piece.ph, // ✅ ارتفاع اصلی بدون تغییر
+      );
+    }
+
+    ctx.restore();
+  });
+
+  ctx.restore();
+};
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 🌪️ VORTEX EFFECT RENDERER PRO
 // ═══════════════════════════════════════════════════════════════════════════
 const renderVortex = (
   ctx: CanvasRenderingContext2D,
@@ -50,58 +221,85 @@ const renderVortex = (
   width: number,
   height: number,
   engine: any,
-  pieces: any[]
+  pieces: any[],
 ): void => {
   if (!engine || typeof window === "undefined") return;
   const Matter = (window as any).Matter;
   if (!Matter) return;
 
   const bodies = Matter.Composite.allBodies(engine.world);
+  const vortexCenter = (engine as any)._vortexCenter || { x: width / 2, y: height / 2 };
+  const clockwise = (engine as any)._clockwise || 1;
 
   ctx.save();
 
-  // رسم افکت گردباد (خطوط مارپیچی شفاف)
-  const centerX = width / 2;
-  const centerY = height / 2;
+  // 🌀 رسم افکت گردباد (خطوط مارپیچی متحرک)
+  const spiralCount = 5;
+  const maxRadius = Math.max(width, height) * 0.8;
 
-  ctx.strokeStyle = `rgba(100, 150, 255, ${0.3 * (1 - progress)})`;
-  ctx.lineWidth = 2;
+  ctx.strokeStyle = `rgba(100, 150, 255, ${0.4 * (1 - progress)})`;
+  ctx.lineWidth = 3;
 
-  for (let i = 0; i < 3; i++) {
-    const angle = progress * Math.PI * 4 + (i * Math.PI * 2) / 3;
-    const radius = 50 + progress * 300;
+  for (let i = 0; i < spiralCount; i++) {
+    const angle = progress * Math.PI * 6 * clockwise + (i * Math.PI * 2) / spiralCount;
+    const radius = 30 + progress * maxRadius;
 
     ctx.beginPath();
-    ctx.arc(centerX, centerY, radius + i * 30, angle, angle + Math.PI / 2);
+
+    // رسم مارپیچ
+    for (let t = 0; t < Math.PI * 2; t += 0.1) {
+      const r = radius * (1 + (t / (Math.PI * 2)) * 0.5);
+      const x = vortexCenter.x + Math.cos(angle + t * clockwise) * r;
+      const y = vortexCenter.y + Math.sin(angle + t * clockwise) * r;
+
+      if (t === 0) {
+        ctx.moveTo(x, y);
+      } else {
+        ctx.lineTo(x, y);
+      }
+    }
+
     ctx.stroke();
   }
 
-  // ✅ رندر قطعات با استفاده از body position
+  // ⭐ رسم ستاره‌های کوچک (برای جلوه بصری)
+  ctx.fillStyle = `rgba(150, 200, 255, ${0.6 * (1 - progress)})`;
+  for (let i = 0; i < 20; i++) {
+    const angle = (i / 20) * Math.PI * 2 + progress * Math.PI * 4;
+    const dist = 40 + ((progress * 200 + i * 15) % 400);
+    const x = vortexCenter.x + Math.cos(angle) * dist;
+    const y = vortexCenter.y + Math.sin(angle) * dist;
+
+    ctx.beginPath();
+    ctx.arc(x, y, 2 + Math.sin(progress * Math.PI * 10 + i) * 1, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // ✅ رندر قطعات - بدون تغییر رنگ یا opacity
   bodies.forEach((body: any) => {
-    // ✅ پیدا کردن قطعه مربوطه از روی pieceId ذخیره شده در body
+    if (body.isStatic) return;
+
     const pieceId = body.pieceId;
     const piece = pieces.find((p: any) => p.id === pieceId);
-
     if (!piece || !piece.img) return;
 
-    const opacity = Math.max(0, 1 - progress * 1.2); // محو تدریجی
-
     ctx.save();
-    ctx.globalAlpha = opacity;
+    // ✅ opacity همیشه 1 - بدون محو شدن تدریجی
+    ctx.globalAlpha = 1;
+
     ctx.translate(body.position.x, body.position.y);
     ctx.rotate(body.angle);
 
-    // ✅ رسم قطعه با source coordinates از تصویر اصلی
     ctx.drawImage(
       piece.img,
       piece.sx,
       piece.sy,
       piece.sw,
-      piece.sh, // source
+      piece.sh,
       -piece.pw / 2,
       -piece.ph / 2,
       piece.pw,
-      piece.ph // destination
+      piece.ph,
     );
 
     ctx.restore();
@@ -111,7 +309,7 @@ const renderVortex = (
 };
 
 // ═══════════════════════════════════════════════════════════════════════════
-// 💥 WRECKING BALL EFFECT RENDERER
+// 💥 WRECKING BALL EFFECT RENDERER PRO
 // ═══════════════════════════════════════════════════════════════════════════
 const renderWreckingBall = (
   ctx: CanvasRenderingContext2D,
@@ -119,36 +317,29 @@ const renderWreckingBall = (
   width: number,
   height: number,
   engine: any,
-  pieces: any[]
+  pieces: any[],
 ): void => {
   if (!engine || typeof window === "undefined") return;
   const Matter = (window as any).Matter;
   if (!Matter) return;
 
   const bodies = Matter.Composite.allBodies(engine.world);
-  const wreckingBall = (engine as any)._wreckingBall;
-  const ballRadius = (engine as any)._wreckingBallRadius || 40;
+  const wreckingBalls = (engine as any)._wreckingBalls || [];
 
   ctx.save();
 
-  // رندر قطعات
+  // رندر قطعات - بدون تغییر رنگ
   bodies.forEach((body: any) => {
-    // اگر این توپ است، رندر جداگانه
-    if (body === wreckingBall) return;
+    if (body.isStatic || (body as any)._isBall) return;
 
     const pieceId = body.pieceId;
     const piece = pieces.find((p: any) => p.id === pieceId);
-
     if (!piece || !piece.img) return;
 
-    // محاسبه opacity بر اساس سرعت (قطعات سریع‌تر زودتر محو می‌شوند)
-    const velocity = Math.sqrt(body.velocity.x ** 2 + body.velocity.y ** 2);
-    const baseOpacity = 1 - progress * 0.8;
-    const velocityFade = Math.max(0, 1 - velocity / 30);
-    const opacity = Math.min(baseOpacity, velocityFade);
-
     ctx.save();
-    ctx.globalAlpha = opacity;
+    // ✅ opacity همیشه 1
+    ctx.globalAlpha = 1;
+
     ctx.translate(body.position.x, body.position.y);
     ctx.rotate(body.angle);
 
@@ -161,123 +352,65 @@ const renderWreckingBall = (
       -piece.pw / 2,
       -piece.ph / 2,
       piece.pw,
-      piece.ph
+      piece.ph,
     );
 
     ctx.restore();
   });
 
-  // رندر توپ ویرانگر
-  if (wreckingBall && progress < 0.7) {
+  // رندر توپ(های) ویرانگر
+  wreckingBalls.forEach((ball: any, index: number) => {
+    if (!ball || progress > 0.8) return;
+
     ctx.save();
-    ctx.globalAlpha = 1 - progress * 1.5;
+    ctx.globalAlpha = Math.max(0, 1 - progress * 1.5);
 
-    // سایه توپ
-    ctx.shadowColor = "rgba(0, 0, 0, 0.5)";
-    ctx.shadowBlur = 20;
-    ctx.shadowOffsetX = 10;
-    ctx.shadowOffsetY = 10;
+    // سایه سه‌بعدی
+    ctx.shadowColor = "rgba(0, 0, 0, 0.6)";
+    ctx.shadowBlur = 25;
+    ctx.shadowOffsetX = 12;
+    ctx.shadowOffsetY = 12;
 
-    // بدنه توپ
+    // بدنه توپ با گرادیان
     ctx.beginPath();
-    ctx.arc(wreckingBall.position.x, wreckingBall.position.y, ballRadius, 0, Math.PI * 2);
+    const ballRadius = (ball as any)._ballRadius || 40;
+    ctx.arc(ball.position.x, ball.position.y, ballRadius, 0, Math.PI * 2);
 
-    // گرادیان برای حجم سه‌بعدی
     const gradient = ctx.createRadialGradient(
-      wreckingBall.position.x - ballRadius * 0.3,
-      wreckingBall.position.y - ballRadius * 0.3,
+      ball.position.x - ballRadius * 0.3,
+      ball.position.y - ballRadius * 0.3,
       ballRadius * 0.2,
-      wreckingBall.position.x,
-      wreckingBall.position.y,
-      ballRadius
+      ball.position.x,
+      ball.position.y,
+      ballRadius,
     );
-    gradient.addColorStop(0, "#5D6D7E");
-    gradient.addColorStop(1, "#1C2833");
+
+    const color1 = index === 0 ? "#5D6D7E" : "#E74C3C";
+    const color2 = index === 0 ? "#1C2833" : "#922B21";
+
+    gradient.addColorStop(0, color1);
+    gradient.addColorStop(1, color2);
 
     ctx.fillStyle = gradient;
     ctx.fill();
 
-    // outline
-    ctx.strokeStyle = "#34495E";
-    ctx.lineWidth = 3;
+    // outline ضخیم
+    ctx.strokeStyle = index === 0 ? "#34495E" : "#C0392B";
+    ctx.lineWidth = 4;
     ctx.stroke();
 
-    ctx.restore();
-  }
-
-  ctx.restore();
-};
-
-// ═══════════════════════════════════════════════════════════════════════════
-// 🧱 WALL COLLAPSE EFFECT RENDERER (با Perspective 3D)
-// ═══════════════════════════════════════════════════════════════════════════
-const renderWallCollapse = (
-  ctx: CanvasRenderingContext2D,
-  progress: number,
-  width: number,
-  height: number,
-  engine: any,
-  pieces: any[]
-): void => {
-  if (!engine || typeof window === "undefined") return;
-  const Matter = (window as any).Matter;
-  if (!Matter) return;
-
-  const bodies = Matter.Composite.allBodies(engine.world);
-  const canvasHeight = (engine as any)._canvasHeight || height;
-
-  ctx.save();
-
-  // مرتب‌سازی بر اساس Z-depth (قطعات دورتر اول رسم شوند)
-  const bodiesWithDepth = bodies
-    .map((body: any) => {
-      const pieceData = (body as any)._pieceData || { normalizedY: 0 };
-      const zDepth = progress * pieceData.normalizedY * 500; // عمق بر اساس progress
-      return { body, zDepth, pieceData };
-    })
-    .sort((a: any, b: any) => b.zDepth - a.zDepth);
-
-  bodiesWithDepth.forEach(({ body, zDepth, pieceData }: any) => {
-    const pieceId = body.pieceId;
-    const piece = pieces.find((p: any) => p.id === pieceId);
-
-    if (!piece || !piece.img) return;
-
-    // محاسبه perspective transformation
-    const perspective = 800; // فاصله دوربین
-    const scale = perspective / (perspective + zDepth);
-
-    // محاسبه موقعیت با perspective
-    const perspectiveX = width / 2 + (body.position.x - width / 2) * scale;
-    const perspectiveY = canvasHeight / 2 + (body.position.y - canvasHeight / 2) * scale;
-
-    // محاسبه opacity
-    const opacity = Math.max(0, (1 - progress * 1.2) * scale);
-
-    ctx.save();
-    ctx.globalAlpha = opacity;
-    ctx.translate(perspectiveX, perspectiveY);
-    ctx.rotate(body.angle);
-    ctx.scale(scale, scale);
-
-    // اضافه کردن سایه برای عمق
-    if (zDepth > 50) {
-      ctx.shadowColor = "rgba(0, 0, 0, 0.3)";
-      ctx.shadowBlur = zDepth / 20;
-      ctx.shadowOffsetY = zDepth / 30;
-    }
-
-    ctx.drawImage(
-      piece.img,
-      piece.sx,
-      piece.sy,
-      piece.sw,
-      piece.sh,
-      -piece.pw / 2,
-      -piece.ph / 2,
-      piece.pw,
-      piece.ph
+    // نقاط درخشان (highlights)
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = "rgba(255, 255, 255, 0.3)";
+    ctx.beginPath();
+    ctx.arc(
+      ball.position.x - ballRadius * 0.4,
+      ball.position.y - ballRadius * 0.4,
+      ballRadius * 0.2,
+      0,
+      Math.PI * 2,
     );
+    ctx.fill();
 
     ctx.restore();
   });
@@ -286,92 +419,57 @@ const renderWallCollapse = (
 };
 
 // ═══════════════════════════════════════════════════════════════════════════
-// 🛸 UFO ABDUCTION EFFECT RENDERER
+// 🌀 CENTRIFUGE EFFECT RENDERER PRO
 // ═══════════════════════════════════════════════════════════════════════════
-const renderUfoAbduction = (
+const renderCentrifuge = (
   ctx: CanvasRenderingContext2D,
   progress: number,
   width: number,
   height: number,
   engine: any,
-  pieces: any[]
+  pieces: any[],
 ): void => {
   if (!engine || typeof window === "undefined") return;
   const Matter = (window as any).Matter;
   if (!Matter) return;
 
   const bodies = Matter.Composite.allBodies(engine.world);
-  const beamCenter = (engine as any)._beamCenter || { x: width / 2, y: -50 };
-  const beamRadius = (engine as any)._beamRadius || width * 0.4;
+  const centrifugeCenter = (engine as any)._centrifugeCenter || { x: width / 2, y: height / 2 };
+  const clockwise = (engine as any)._clockwise || 1;
 
   ctx.save();
 
-  // رسم پرتو UFO (نور مخروطی از بالا)
-  if (progress < 0.6) {
-    const beamOpacity = (1 - progress / 0.6) * 0.3;
-
-    ctx.save();
-    ctx.globalAlpha = beamOpacity;
-
-    // ایجاد gradient برای پرتو
-    const gradient = ctx.createLinearGradient(beamCenter.x, 0, beamCenter.x, height);
-    gradient.addColorStop(0, "rgba(150, 200, 255, 0.6)");
-    gradient.addColorStop(0.3, "rgba(100, 150, 255, 0.3)");
-    gradient.addColorStop(1, "rgba(100, 150, 255, 0)");
-
-    ctx.fillStyle = gradient;
-
-    // رسم شکل مخروطی پرتو
-    ctx.beginPath();
-    ctx.moveTo(beamCenter.x - 20, 0);
-    ctx.lineTo(beamCenter.x - beamRadius, height);
-    ctx.lineTo(beamCenter.x + beamRadius, height);
-    ctx.lineTo(beamCenter.x + 20, 0);
-    ctx.closePath();
-    ctx.fill();
-
-    // خطوط انرژی درخشان
-    ctx.strokeStyle = "rgba(150, 200, 255, 0.4)";
+  // 🌀 رسم خطوط چرخشی (اختیاری - برای جلوه بصری)
+  if (progress < 0.5) {
+    const opacity = (1 - progress / 0.5) * 0.3;
+    ctx.strokeStyle = `rgba(150, 150, 200, ${opacity})`;
     ctx.lineWidth = 2;
-    for (let i = 0; i < 5; i++) {
-      const offset = (progress * 200 + i * 50) % 300;
+
+    for (let i = 0; i < 8; i++) {
+      const angle = (i / 8) * Math.PI * 2 + progress * Math.PI * 4 * clockwise;
+      const radius = 50 + progress * 400;
+
       ctx.beginPath();
-      ctx.moveTo(beamCenter.x - beamRadius * 0.5 + offset, offset);
-      ctx.lineTo(beamCenter.x + beamRadius * 0.5 - offset, offset);
+      ctx.moveTo(centrifugeCenter.x, centrifugeCenter.y);
+      ctx.lineTo(
+        centrifugeCenter.x + Math.cos(angle) * radius,
+        centrifugeCenter.y + Math.sin(angle) * radius,
+      );
       ctx.stroke();
     }
-
-    ctx.restore();
   }
 
-  // رندر قطعات
+  // رندر قطعات - بدون تغییر رنگ
   bodies.forEach((body: any) => {
+    if (body.isStatic) return;
+
     const pieceId = body.pieceId;
     const piece = pieces.find((p: any) => p.id === pieceId);
-
     if (!piece || !piece.img) return;
 
-    const beamData = (body as any)._beamData || { isInBeam: false, pullStrength: 0 };
-
-    // قطعات داخل پرتو درخشان‌تر
-    let opacity = 1 - progress * 1.2;
-
-    if (beamData.isInBeam && progress < 0.5) {
-      // افکت درخشش برای قطعات داخل پرتو
-      const glow = Math.sin(progress * Math.PI * 10) * 0.3 + 0.7;
-      opacity *= glow;
-    }
-
-    opacity = Math.max(0, opacity);
-
     ctx.save();
-    ctx.globalAlpha = opacity;
-
-    // درخشش برای قطعات در پرتو
-    if (beamData.isInBeam && progress < 0.5) {
-      ctx.shadowColor = "rgba(150, 200, 255, 0.8)";
-      ctx.shadowBlur = 15;
-    }
+    // ✅ opacity همیشه 1
+    ctx.globalAlpha = 1;
 
     ctx.translate(body.position.x, body.position.y);
     ctx.rotate(body.angle);
@@ -385,7 +483,59 @@ const renderUfoAbduction = (
       -piece.pw / 2,
       -piece.ph / 2,
       piece.pw,
-      piece.ph
+      piece.ph,
+    );
+
+    ctx.restore();
+  });
+
+  ctx.restore();
+};
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 🛸 REVERSE GRAVITY EFFECT RENDERER PRO
+// ═══════════════════════════════════════════════════════════════════════════
+const renderReverseGravity = (
+  ctx: CanvasRenderingContext2D,
+  progress: number,
+  width: number,
+  height: number,
+  engine: any,
+  pieces: any[],
+): void => {
+  if (!engine || typeof window === "undefined") return;
+  const Matter = (window as any).Matter;
+  if (!Matter) return;
+
+  const bodies = Matter.Composite.allBodies(engine.world);
+
+  ctx.save();
+
+  // رندر قطعات - بدون تغییر رنگ
+  bodies.forEach((body: any) => {
+    if (body.isStatic) return;
+
+    const pieceId = body.pieceId;
+    const piece = pieces.find((p: any) => p.id === pieceId);
+    if (!piece || !piece.img) return;
+
+    ctx.save();
+    // ✅ opacity همیشه 1
+    ctx.globalAlpha = 1;
+
+    ctx.translate(body.position.x, body.position.y);
+    ctx.rotate(body.angle);
+
+    ctx.drawImage(
+      piece.img,
+      piece.sx,
+      piece.sy,
+      piece.sw,
+      piece.sh,
+      -piece.pw / 2,
+      -piece.ph / 2,
+      piece.pw,
+      piece.ph,
     );
 
     ctx.restore();
