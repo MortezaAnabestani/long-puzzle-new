@@ -45,7 +45,17 @@ export enum MovementType {
 export enum PuzzleBackground {
   FROSTED_DISCOVERY = "Frosted Discovery",
 }
+export enum TopicType {
+  BREAKING = "Breaking Signal",
+  VIRAL = "Viral Trend",
+  MANUAL = "Custom Entry",
+  NARRATIVE = "Historical Discovery",
+}
 
+export enum MusicSelectionMode {
+  AI_SEARCH = "AI_SEARCH", // Use AI to find music online
+  DATABASE = "DATABASE", // Use local database music
+}
 // ─── LONG-FORM CORE ENUMS ─────────────────────────────────────────────
 
 /** چهار ژنره بازسازی تاریخی */
@@ -185,6 +195,11 @@ export interface DocumentaryProject {
   createdAt: number;
 }
 
+export enum BackendMode {
+  JSON = "json",
+  ALL = "all",
+}
+
 // ─── STORY ARC ────────────────────────────────────────────────────────
 
 export interface StoryArc {
@@ -285,15 +300,15 @@ export const GENRE_PRESETS: Record<ReconstructionGenre, GenrePreset> = {
 // ─── UTILITY FUNCTIONS ────────────────────────────────────────────────
 
 /**
- * هر 45 ثانیه یک فصل. 30s intro + 30s outro حذف میشه.
- *   8 دقیقه  → 10 فصل
- *  10 دقیقه  → 13 فصل
- *  12 دقیقه  → 15 فصل
- *  15 دقیقه  → 19 فصل
+ * هر 30 ثانیه یک فصل (عکس/پازل). 30s intro + 30s outro حذف میشه.
+ *   8 دقیقه  → 16 فصل
+ *  10 دقیقه  → 20 فصل
+ *  12 دقیقه  → 24 فصل
+ *  15 دقیقه  → 30 فصل
  */
 export function calcChapterCount(durationMinutes: number): number {
-  const usableSeconds = durationMinutes * 60 - 60;
-  return Math.floor(usableSeconds / 45);
+  const usableSeconds = durationMinutes * 60 - 60; // حذف intro/outro
+  return Math.floor(usableSeconds / 30); // هر 30 ثانیه یک فصل
 }
 
 export function assignChapterRoles(totalChapters: number): ChapterRole[] {
@@ -339,7 +354,7 @@ export function getChapterTransition(role: ChapterRole): ChapterTransition {
 
 export function getPieceCountForComplexity(
   complexity: "easy" | "medium" | "hard",
-  basePieceCount: number
+  basePieceCount: number,
 ): number {
   switch (complexity) {
     case "easy":

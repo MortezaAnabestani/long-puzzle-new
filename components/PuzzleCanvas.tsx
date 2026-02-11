@@ -253,6 +253,12 @@ const PuzzleCanvas = forwardRef<CanvasHandle, PuzzleCanvasProps>(
         isTransitioningRef.current = true;
         transitionCallbackFiredRef.current = false;
 
+        // 🔊 پخش صدای ترنزیشن
+        if (sonicEngine.hasSound("TRANSITION")) {
+          sonicEngine.play("TRANSITION", 0.6);
+          console.log(`🔊 [Canvas] Playing TRANSITION sound`);
+        }
+
         if (engineRef.current) {
           const effect = transitionEngine.getRandomEffect();
 

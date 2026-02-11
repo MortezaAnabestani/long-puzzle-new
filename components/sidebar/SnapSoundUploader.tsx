@@ -1,5 +1,18 @@
 import React, { useRef, useState, useEffect } from "react";
-import { Volume2, Upload, X, CheckCircle2, FileAudio, Waves, Zap, BoxSelect, Download, RefreshCw, List } from "lucide-react";
+import {
+  Volume2,
+  Upload,
+  X,
+  CheckCircle2,
+  FileAudio,
+  Waves,
+  Zap,
+  BoxSelect,
+  Download,
+  RefreshCw,
+  List,
+  Repeat,
+} from "lucide-react";
 import { sonicEngine, SoundType } from "../../services/proceduralAudio";
 import { assetApi } from "../../services/api/assetApi";
 import { soundRandomizer, SoundVariant } from "../../services/soundRandomizer";
@@ -13,10 +26,10 @@ interface SoundSlot {
 const SOUND_SLOTS: SoundSlot[] = [
   { type: "MOVE", label: "صدای حرکت قطعات", icon: <Zap className="w-3.5 h-3.5" /> },
   { type: "SNAP", label: "صدای قفل شدن (Snap)", icon: <BoxSelect className="w-3.5 h-3.5" /> },
+  { type: "TRANSITION", label: "صدای ترنزیشن بین پازل‌ها", icon: <Repeat className="w-3.5 h-3.5" /> },
   { type: "WAVE", label: "صدای موج نهایی", icon: <Waves className="w-3.5 h-3.5" /> },
   { type: "DESTRUCT", label: "صدای انفجار/تخریب", icon: <X className="w-3.5 h-3.5" /> },
 ];
-
 
 interface SnapSoundUploaderProps {
   disabled?: boolean;
@@ -32,10 +45,11 @@ const SnapSoundUploader: React.FC<SnapSoundUploaderProps> = ({ disabled, onRando
 
   // Mapping بین SoundType و backend sound types
   const SOUND_TYPE_MAPPING: Record<SoundType, string> = {
-    'SNAP': 'snap',     // جاخوردن پازل
-    'MOVE': 'slide',    // حرکت قطعات
-    'WAVE': 'wave',     // موج نهایی
-    'DESTRUCT': 'fall'  // انفجار/تخریب
+    SNAP: "snap", // جاخوردن پازل
+    MOVE: "slide", // حرکت قطعات
+    TRANSITION: "transition", // صدای ترنزیشن بین پازل‌ها
+    WAVE: "wave", // موج نهایی
+    DESTRUCT: "fall", // انفجار/تخریب
   };
 
   // بارگذاری خودکار sound effects از backend در صورت وجود
@@ -54,8 +68,8 @@ const SnapSoundUploader: React.FC<SnapSoundUploaderProps> = ({ disabled, onRando
             if (soundUrl) {
               const response = await fetch(soundUrl, {
                 headers: {
-                  'ngrok-skip-browser-warning': 'true'
-                }
+                  "ngrok-skip-browser-warning": "true",
+                },
               });
 
               if (!response.ok) {
@@ -63,9 +77,11 @@ const SnapSoundUploader: React.FC<SnapSoundUploaderProps> = ({ disabled, onRando
               }
 
               const blob = await response.blob();
-              console.log(`📦 [SnapSound] Blob size for ${soundType}: ${blob.size} bytes, type: ${blob.type}`);
+              console.log(
+                `📦 [SnapSound] Blob size for ${soundType}: ${blob.size} bytes, type: ${blob.type}`,
+              );
 
-              const file = new File([blob], `${backendType}.mp3`, { type: 'audio/mpeg' });
+              const file = new File([blob], `${backendType}.mp3`, { type: "audio/mpeg" });
               await sonicEngine.setSound(soundType as SoundType, file);
               setLoadedSounds((prev) => new Set(prev).add(soundType as SoundType));
               loadedCount++;
@@ -77,7 +93,9 @@ const SnapSoundUploader: React.FC<SnapSoundUploaderProps> = ({ disabled, onRando
         }
 
         if (loadedCount > 0) {
-          console.log(`✅ [SnapSound] Successfully loaded ${loadedCount}/${Object.keys(SOUND_TYPE_MAPPING).length} sounds`);
+          console.log(
+            `✅ [SnapSound] Successfully loaded ${loadedCount}/${Object.keys(SOUND_TYPE_MAPPING).length} sounds`,
+          );
         }
       } catch (error) {
         console.warn(`⚠️ [SnapSound] Failed to load from backend:`, error);
@@ -151,7 +169,7 @@ const SnapSoundUploader: React.FC<SnapSoundUploaderProps> = ({ disabled, onRando
     setManualSounds((prev) => {
       const newMap = new Map(prev);
       const existing = newMap.get(type) || [];
-      const updated = existing.filter(s => s.id !== soundId);
+      const updated = existing.filter((s) => s.id !== soundId);
       newMap.set(type, updated);
 
       // به‌روزرسانی soundRandomizer
@@ -215,7 +233,9 @@ const SnapSoundUploader: React.FC<SnapSoundUploaderProps> = ({ disabled, onRando
                 <div className="flex flex-col min-w-0">
                   <span className="text-[10px] font-bold text-zinc-300 tracking-wide">{slot.label}</span>
                   <span className="text-[8px] font-mono text-zinc-600 uppercase">
-                    {isLoaded ? `Ready (${(manualSounds.get(slot.type)?.length || 0) > 0 ? `${manualSounds.get(slot.type)?.length} variants` : 'DB'})` : "Waiting_Input"}
+                    {isLoaded
+                      ? `Ready (${(manualSounds.get(slot.type)?.length || 0) > 0 ? `${manualSounds.get(slot.type)?.length} variants` : "DB"})`
+                      : "Waiting_Input"}
                   </span>
                 </div>
               </div>
@@ -299,10 +319,8 @@ const SnapSoundUploader: React.FC<SnapSoundUploaderProps> = ({ disabled, onRando
               </div>
             );
           })}
-          {Array.from(manualSounds.values()).every(arr => arr.length === 0) && (
-            <div className="text-center text-[10px] text-zinc-600 py-4">
-              هیچ افکت دستی بارگذاری نشده است
-            </div>
+          {Array.from(manualSounds.values()).every((arr) => arr.length === 0) && (
+            <div className="text-center text-[10px] text-zinc-600 py-4">هیچ افکت دستی بارگذاری نشده است</div>
           )}
         </div>
       )}

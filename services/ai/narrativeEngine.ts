@@ -89,7 +89,7 @@ export const detectMusicMoodFromTopic = (topic: string, narrativeLens: Narrative
 
 export const generateCoherentStoryArc = async (
   topic: string,
-  narrativeLens: NarrativeLens
+  narrativeLens: NarrativeLens,
 ): Promise<StoryArc> => {
   const ai = getAI();
 
@@ -243,7 +243,7 @@ export const generateDocumentaryNarrative = async (
   topic: string,
   narrativeLens: NarrativeLens,
   targetDurationMinutes: number,
-  masterVisualStyle: MasterVisualStyle
+  masterVisualStyle: MasterVisualStyle,
 ): Promise<NarrativeGenerationResponse> => {
   const ai = getAI();
   const preset = GENRE_PRESETS[genre];
@@ -257,7 +257,7 @@ export const generateDocumentaryNarrative = async (
     console.log(`✅ AI Generated Topic: ${finalTopic} (Score: ${topicData.engagementScore}/10)`);
   }
 
-  const chapterCount = Math.floor((targetDurationMinutes * 60 - 60) / 45);
+  const chapterCount = Math.floor((targetDurationMinutes * 60 - 60) / 30); // هر 30 ثانیه یک فصل
   const masterStylePrompt = buildMasterStylePrompt(masterVisualStyle, genre);
 
   const roleArray = assignChapterRoles(chapterCount);
@@ -280,17 +280,20 @@ Genre: ${genre}
 Narrative Style: ${narrativeLens}
 ${LENS_INSTRUCTIONS[narrativeLens]}
 
-CHAPTER STRUCTURE (${chapterCount} chapters, each ~45 seconds):
+CHAPTER STRUCTURE (${chapterCount} chapters, each ~30 seconds):
 ${chapterInstructions}
 
 🔥 CRITICAL REQUIREMENTS FOR narrativeText:
-- MUST be 25-30 words (target for YouTube short-form vertical video)
-- MUST contain ONLY complete sentences (no sentences ending with: "of", "and", "the", "but", "however", "with", etc.)
-- Each sentence MUST end with proper punctuation (. ! ?)
-- If a sentence would be incomplete, finish it or remove it entirely
+- MUST be 20-25 words (optimized for 30-second YouTube short-form vertical video)
+- MUST contain ONLY semantically complete sentences
+- Each text MUST be a standalone, complete thought that makes sense on its own
+- NO incomplete sentences ending with: "of", "and", "the", "but", "however", "with", "که", "و", "با", etc.
+- Each sentence MUST end with proper punctuation (. ! ? ؟ !)
+- Persian text MUST follow proper grammar and end with complete thoughts
+- If a sentence would be incomplete, finish it completely or remove it entirely
 - Ideal structure: 2-3 complete sentences that flow naturally
 - Display time: ~3-4 seconds per text box
-- Must be self-contained and make sense on its own
+- Must be self-contained and independently understandable
 
 OTHER REQUIREMENTS:
 - All ${chapterCount} chapters tell ONE continuous, coherent story

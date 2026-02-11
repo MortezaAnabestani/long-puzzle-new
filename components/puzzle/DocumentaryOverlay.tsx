@@ -90,12 +90,12 @@ const DocumentaryOverlay: React.FC<DocumentaryOverlayProps> = ({
   };
 
   return (
-    <div className="absolute bottom-[22%] left-1/2 -translate-x-1/2 w-[90%] max-w-[340px] z-[110] animate-in fade-in slide-in-from-bottom-4 duration-500">
-      <div className="bg-zinc-950/80 backdrop-blur-2xl border border-white/10 p-4 rounded-2xl shadow-2xl flex items-start gap-3 overflow-hidden">
+    <div className="absolute bottom-[10%] left-1/2 -translate-x-1/2 w-[90%] max-w-[340px] z-[110] animate-in fade-in slide-in-from-bottom-4 duration-500">
+      <div className="backdrop-blur-md bg-zinc-950/60 border border-white/20 p-4 rounded-2xl shadow-2xl flex items-start gap-3 overflow-hidden">
         <div
           className={`w-8 h-8 rounded-xl ${
             colorClasses[config.color]
-          } flex items-center justify-center shrink-0 mt-0.5`}
+          } flex items-center justify-center shrink-0 mt-0.5 backdrop-blur-sm`}
         >
           {config.icon}
         </div>
@@ -105,10 +105,10 @@ const DocumentaryOverlay: React.FC<DocumentaryOverlayProps> = ({
               config.color === "yellow"
                 ? "text-yellow-500/70"
                 : config.color === "purple"
-                ? "text-purple-500/70"
-                : config.color === "green"
-                ? "text-emerald-500/70"
-                : "text-blue-500/70"
+                  ? "text-purple-500/70"
+                  : config.color === "green"
+                    ? "text-emerald-500/70"
+                    : "text-blue-500/70"
             }`}
           >
             {config.label}
@@ -126,10 +126,10 @@ const DocumentaryOverlay: React.FC<DocumentaryOverlayProps> = ({
             config.color === "yellow"
               ? "bg-yellow-500/40"
               : config.color === "purple"
-              ? "bg-purple-500/40"
-              : config.color === "green"
-              ? "bg-emerald-500/40"
-              : "bg-blue-500/40"
+                ? "bg-purple-500/40"
+                : config.color === "green"
+                  ? "bg-emerald-500/40"
+                  : "bg-blue-500/40"
           } animate-pulse w-full`}
         />
       </div>

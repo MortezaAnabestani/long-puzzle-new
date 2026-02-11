@@ -43,6 +43,40 @@ import { TEST_PROJECTS } from "../utils/testModeData";
 
 // ─── TYPES ────────────────────────────────────────────────────────────
 
+// ─── HELPER: RANDOM PUZZLE CONFIG ─────────────────────────────────────
+
+/**
+ * تولید کانفیگ تصادفی برای هر پازل
+ * هر فصل یک Shape, Material, و Movement رندوم دریافت می‌کند
+ */
+const generateRandomPuzzleConfig = (pieceCount: number, complexity: "easy" | "medium" | "hard") => {
+  const shapes: PieceShape[] = [PieceShape.SQUARE, PieceShape.HEXAGON, PieceShape.JIGSAW, PieceShape.BRICK];
+
+  const materials: PieceMaterial[] = [
+    PieceMaterial.CARDBOARD,
+    PieceMaterial.WOOD,
+    PieceMaterial.GLASS,
+    PieceMaterial.CARBON,
+  ];
+
+  const movements: MovementType[] = [
+    MovementType.STANDARD,
+    MovementType.FLIGHT,
+    MovementType.WAVE,
+    MovementType.VORTEX,
+    MovementType.ELASTIC,
+    MovementType.PLAYFUL,
+  ];
+
+  return {
+    pieceCount,
+    shape: shapes[Math.floor(Math.random() * shapes.length)],
+    material: materials[Math.floor(Math.random() * materials.length)],
+    movement: movements[Math.floor(Math.random() * movements.length)],
+    complexityLevel: complexity,
+  };
+};
+
 export type PipelineStep =
   | "IDLE"
   | "SCAN"
@@ -99,7 +133,7 @@ const CLOUDFLARE_WORKER_URL = "https://plain-tooth-75c3.jujube-bros.workers.dev/
 const decodeAndStoreMusicBuffer = async (
   audioRef: React.RefObject<HTMLAudioElement | null>,
   musicBufferRef: React.MutableRefObject<AudioBuffer | null>,
-  blobOrNull?: Blob | null
+  blobOrNull?: Blob | null,
 ): Promise<void> => {
   const ctx = sonicEngine.getContext();
   if (!ctx) {
@@ -156,7 +190,7 @@ interface SmartMusicParams {
 }
 
 const selectSmartMusic = async (
-  params: SmartMusicParams
+  params: SmartMusicParams,
 ): Promise<{ source: string; title: string; blob?: Blob } | null> => {
   const { musicTracks, mood, topic, fetchAudioBlob, onAddCloudTrack, setActiveTrackName, audioRef } = params;
 
@@ -255,7 +289,7 @@ export const useProductionPipeline = (
   setActiveTrackName: (name: string | null) => void,
   onAddCloudTrack: (url: string, title: string, source?: "backend" | "ai") => void,
   audioRef: React.RefObject<HTMLAudioElement | null>,
-  musicBufferRef: React.MutableRefObject<AudioBuffer | null>
+  musicBufferRef: React.MutableRefObject<AudioBuffer | null>,
 ) => {
   // ✅ TEST MODE HOOK
   const { isTestMode, selectedTestProject } = useTestMode();
@@ -302,7 +336,7 @@ export const useProductionPipeline = (
         };
       });
     },
-    []
+    [],
   );
 
   const initProductionSteps = useCallback(() => {
@@ -385,11 +419,11 @@ export const useProductionPipeline = (
                 `TITLE: ${metadata.title}\n\nDESC:\n${
                   metadata.description
                 }\n\nCHAPTER MARKERS:\n${markerText}\n\nTAGS: ${metadata.tags.join(
-                  ", "
+                  ", ",
                 )}\n\nHASHTAGS: ${metadata.hashtags.join(" ")}`,
               ],
-              { type: "text/plain" }
-            )
+              { type: "text/plain" },
+            ),
           );
         }
 
@@ -434,7 +468,7 @@ export const useProductionPipeline = (
               updateProductionStep(
                 "📦 PACKAGE",
                 "completed",
-                `ذخیره شد — ID: ${result.data?._id?.substring(0, 8)}...`
+                `ذخیره شد — ID: ${result.data?._id?.substring(0, 8)}...`,
               );
             } else {
               updateProductionStep("📦 PACKAGE", "completed", "دانلود انجام شد — خطا در ذخیره DB");
@@ -455,7 +489,7 @@ export const useProductionPipeline = (
             const hasNext = prev.isFullPackage && nextIdx < prev.queue.length;
             if (hasNext)
               console.log(
-                `\n➡️  [AutoPilot] Moving to next documentary (${nextIdx + 1}/${prev.queue.length})\n`
+                `\n➡️  [AutoPilot] Moving to next documentary (${nextIdx + 1}/${prev.queue.length})\n`,
               );
             else console.log(`\n🏁 [AutoPilot] All documentaries completed!\n`);
             return {
@@ -473,7 +507,7 @@ export const useProductionPipeline = (
         }, 2500);
       }
     },
-    [metadata, state.thumbnailDataUrl, state.project, state.storyArc, updateProductionStep]
+    [metadata, state.thumbnailDataUrl, state.project, state.storyArc, updateProductionStep],
   );
 
   useEffect(() => {
@@ -515,7 +549,7 @@ export const useProductionPipeline = (
         updateProductionStep(
           "📊 SCAN",
           "completed",
-          `TEST: ${selectedTestProject.chapters.length} فصل — ${selectedTestProject.totalDuration}s`
+          `TEST: ${selectedTestProject.chapters.length} فصل — ${selectedTestProject.totalDuration}s`,
         );
 
         // ─── STEP 2: NARRATIVE (فوری - از test data) ──────────────
@@ -525,7 +559,7 @@ export const useProductionPipeline = (
         updateProductionStep(
           "📖 NARRATIVE",
           "completed",
-          `TEST: ${selectedTestProject.chapters.length} فصل آماده`
+          `TEST: ${selectedTestProject.chapters.length} فصل آماده`,
         );
 
         // ساخت chapters از test data
@@ -535,6 +569,9 @@ export const useProductionPipeline = (
           const complexity = getChapterComplexity(role);
           const pieceCount = getPieceCountForComplexity(complexity, preferences.defaultPieceCount);
 
+          // 🎲 هر فصل کانفیگ تصادفی خودش را می‌گیرد
+          const randomConfig = generateRandomPuzzleConfig(pieceCount, complexity);
+
           return {
             id: `test_ch_${i}`,
             index: i,
@@ -543,13 +580,7 @@ export const useProductionPipeline = (
             narrativeText: testCh.narrativeText,
             imagePrompt: testCh.narrativeText, // استفاده از narrativeText به عنوان prompt
             imageUrl: testCh.imageUrl, // ✅ تصویر از قبل آماده است
-            puzzleConfig: {
-              pieceCount,
-              shape: preferences.defaultShape,
-              material: preferences.defaultMaterial,
-              movement: preferences.defaultMovement,
-              complexityLevel: complexity,
-            },
+            puzzleConfig: randomConfig,
             durationSeconds: testCh.duration,
             transition: getChapterTransition(role),
             status: ChapterStatus.IMAGE_READY, // ✅ تصویر از قبل آماده است
@@ -563,7 +594,7 @@ export const useProductionPipeline = (
         updateProductionStep(
           "🖼️ IMAGES",
           "completed",
-          `TEST: ${chapters.length}/${chapters.length} تصویر آماده (بدون AI)`
+          `TEST: ${chapters.length}/${chapters.length} تصویر آماده (بدون AI)`,
         );
 
         // ─── STEP 4: MUSIC (بای‌پس یا استفاده از دستی) ────────────
@@ -629,7 +660,7 @@ export const useProductionPipeline = (
         updateProductionStep(
           "📝 METADATA",
           "completed",
-          `TEST: ${docMetadata.chapterMarkers.length} markers`
+          `TEST: ${docMetadata.chapterMarkers.length} markers`,
         );
 
         // ─── STEP 6: READY ─────────────────────────────────────────
@@ -681,7 +712,7 @@ export const useProductionPipeline = (
       initProductionSteps,
       updateProductionStep,
       setActiveTrackName,
-    ]
+    ],
   );
 
   // ─── AI MODE PIPELINE (اصلی) ──────────────────────────────────────
@@ -709,12 +740,12 @@ export const useProductionPipeline = (
         // ─── STEP 1: SCAN ───────────────────────────────────────
         const chapterCount = calcChapterCount(item.targetDurationMinutes);
         console.log(
-          `📊 [SCAN] Genre: ${item.genre}, Topic: "${item.topic}", Chapters: ${chapterCount}, Duration: ${item.targetDurationMinutes}min`
+          `📊 [SCAN] Genre: ${item.genre}, Topic: "${item.topic}", Chapters: ${chapterCount}, Duration: ${item.targetDurationMinutes}min`,
         );
         updateProductionStep(
           "📊 SCAN",
           "completed",
-          `${item.genre} — ${chapterCount} فصل — ${item.targetDurationMinutes} دق`
+          `${item.genre} — ${chapterCount} فصل — ${item.targetDurationMinutes} دق`,
         );
 
         // ─── STEP 2: NARRATIVE ──────────────────────────────────
@@ -726,16 +757,16 @@ export const useProductionPipeline = (
           item.topic,
           item.narrativeLens,
           item.targetDurationMinutes,
-          item.masterVisualStyle
+          item.masterVisualStyle,
         );
 
         console.log(
-          `📖 [NARRATIVE] Generated ${narrativeResponse.chapters.length} chapters — topic: "${narrativeResponse.topic}"`
+          `📖 [NARRATIVE] Generated ${narrativeResponse.chapters.length} chapters — topic: "${narrativeResponse.topic}"`,
         );
         updateProductionStep(
           "📖 NARRATIVE",
           "completed",
-          `${narrativeResponse.chapters.length} فصل تولید شد`
+          `${narrativeResponse.chapters.length} فصل تولید شد`,
         );
 
         const roles = assignChapterRoles(narrativeResponse.chapters.length);
@@ -745,6 +776,9 @@ export const useProductionPipeline = (
           const complexity = getChapterComplexity(role);
           const pieceCount = getPieceCountForComplexity(complexity, preferences.defaultPieceCount);
 
+          // 🎲 هر فصل کانفیگ تصادفی خودش را می‌گیرد
+          const randomConfig = generateRandomPuzzleConfig(pieceCount, complexity);
+
           return {
             id: `ch_${Date.now()}_${i}`,
             index: i,
@@ -753,14 +787,8 @@ export const useProductionPipeline = (
             narrativeText: nc.narrativeText,
             imagePrompt: nc.imagePrompt,
             imageUrl: null,
-            puzzleConfig: nc.puzzleConfig || {
-              pieceCount,
-              shape: preferences.defaultShape,
-              material: preferences.defaultMaterial,
-              movement: preferences.defaultMovement,
-              complexityLevel: complexity,
-            },
-            durationSeconds: 45,
+            puzzleConfig: nc.puzzleConfig || randomConfig,
+            durationSeconds: 30,
             transition: getChapterTransition(role),
             status: ChapterStatus.PENDING,
           };
@@ -779,7 +807,7 @@ export const useProductionPipeline = (
               updateProductionStep(
                 "🖼️ IMAGES",
                 "in_progress",
-                `فصل ${event.chapterIndex + 1}/${event.totalChapters} تصویر شد`
+                `فصل ${event.chapterIndex + 1}/${event.totalChapters} تصویر شد`,
               );
               if (event.imageUrl) {
                 chapters[event.chapterIndex].imageUrl = event.imageUrl;
@@ -789,7 +817,7 @@ export const useProductionPipeline = (
             if (event.type === "chapter_failed") {
               console.warn(`⚠️ [IMAGE] فصل ${event.chapterIndex + 1} شکست خورد`);
             }
-          }
+          },
         );
 
         imageResults.results.forEach((r) => {
@@ -803,7 +831,7 @@ export const useProductionPipeline = (
         updateProductionStep(
           "🖼️ IMAGES",
           "completed",
-          `${imageResults.totalGenerated}/${chapters.length} موفق`
+          `${imageResults.totalGenerated}/${chapters.length} موفق`,
         );
 
         // ─── STEP 4: MUSIC ──────────────────────────────────────
@@ -859,7 +887,7 @@ export const useProductionPipeline = (
         updateProductionStep(
           "📝 METADATA",
           "completed",
-          `${docMetadata.chapterMarkers.length} chapter marker`
+          `${docMetadata.chapterMarkers.length} chapter marker`,
         );
 
         // ─── STEP 6: READY ──────────────────────────────────────
@@ -905,7 +933,7 @@ export const useProductionPipeline = (
       state.isAutoMode,
       initProductionSteps,
       updateProductionStep,
-    ]
+    ],
   );
 
   // ─── MAIN ROUTER: TEST MODE vs AI MODE ───────────────────────────
@@ -918,7 +946,7 @@ export const useProductionPipeline = (
         await processAIModePipeline(item);
       }
     },
-    [isTestMode, processTestModePipeline, processAIModePipeline]
+    [isTestMode, processTestModePipeline, processAIModePipeline],
   );
 
   // ─── AUTO PILOT TOGGLE ────────────────────────────────────────────

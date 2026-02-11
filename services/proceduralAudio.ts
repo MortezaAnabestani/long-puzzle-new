@@ -1,5 +1,4 @@
-
-export type SoundType = 'MOVE' | 'SNAP' | 'WAVE' | 'DESTRUCT';
+export type SoundType = "MOVE" | "SNAP" | "WAVE" | "DESTRUCT" | "TRANSITION";
 
 class ProceduralAudioEngine {
   private ctx: AudioContext | null = null;
@@ -30,7 +29,7 @@ class ProceduralAudioEngine {
 
   public async unlock() {
     this.init();
-    if (this.ctx && this.ctx.state === 'suspended') {
+    if (this.ctx && this.ctx.state === "suspended") {
       await this.ctx.resume();
     }
   }
@@ -44,7 +43,7 @@ class ProceduralAudioEngine {
       this.buffers.set(type, decodedBuffer);
     } catch (e) {
       console.error(`❌ [SonicEngine] Failed to decode ${type}:`, e);
-      throw new Error(`خطا در پردازش صدا: ${type} - ${e instanceof Error ? e.message : 'Unknown error'}`);
+      throw new Error(`خطا در پردازش صدا: ${type} - ${e instanceof Error ? e.message : "Unknown error"}`);
     }
   }
 
@@ -66,21 +65,21 @@ class ProceduralAudioEngine {
   private playSnapFallback(volume: number) {
     if (!this.ctx || !this.masterGain) return;
     const now = this.ctx.currentTime;
-    
+
     // لایه ۱: صدای فرکانس بالا (کلیک)
     const osc = this.ctx.createOscillator();
     const g = this.ctx.createGain();
-    
-    osc.type = 'triangle';
+
+    osc.type = "triangle";
     osc.frequency.setValueAtTime(800, now);
     osc.frequency.exponentialRampToValueAtTime(40, now + 0.1);
-    
+
     g.gain.setValueAtTime(volume * 0.5, now);
     g.gain.exponentialRampToValueAtTime(0.01, now + 0.1);
-    
+
     osc.connect(g);
     g.connect(this.masterGain);
-    
+
     osc.start(now);
     osc.stop(now + 0.1);
 
@@ -107,10 +106,10 @@ class ProceduralAudioEngine {
 
     const now = this.ctx.currentTime;
     const lastTime = this.lastPlayTime.get(type) || 0;
-    
+
     // جلوگیری از تداخل
-    if (type === 'SNAP' && now - lastTime < 0.1) return;
-    if (type === 'MOVE' && now - lastTime < 0.2) return;
+    if (type === "SNAP" && now - lastTime < 0.1) return;
+    if (type === "MOVE" && now - lastTime < 0.2) return;
 
     this.lastPlayTime.set(type, now);
 
@@ -119,15 +118,15 @@ class ProceduralAudioEngine {
       const source = this.ctx.createBufferSource();
       source.buffer = buffer;
       source.playbackRate.value = pitch;
-      
+
       const g = this.ctx.createGain();
       g.gain.setValueAtTime(volume, now);
       g.gain.exponentialRampToValueAtTime(0.01, now + buffer.duration);
-      
+
       source.connect(g);
       g.connect(this.masterGain);
       source.start(now);
-    } else if (type === 'SNAP') {
+    } else if (type === "SNAP") {
       this.playSnapFallback(volume);
     }
   }
