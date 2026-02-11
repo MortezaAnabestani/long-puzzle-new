@@ -71,7 +71,7 @@ const calculateKineticTransform = (
   t: number,
   movement: MovementType,
   vWidth: number,
-  vHeight: number
+  vHeight: number,
 ) => {
   const baseX = p.cx + (p.tx + p.pw / 2 - p.cx) * t;
   const baseY = p.cy + (p.ty + p.ph / 2 - p.cy) * t;
@@ -180,7 +180,7 @@ export const renderPuzzleFrame = ({
       ctx.fillText(
         `${fState.currentSlide + 1} / ${completedPuzzleSnapshots.length}`,
         vWidth / 2,
-        vHeight - 150
+        vHeight - 150,
       );
 
       ctx.restore();

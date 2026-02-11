@@ -18,6 +18,9 @@ export const renderTransition = (
   if (progress >= 1) return;
 
   switch (transitionType) {
+    case "SWEEP":
+      renderSweep(ctx, progress, canvasWidth, canvasHeight, engine, pieces);
+      break;
     case "WIND":
       renderWind(ctx, progress, canvasWidth, canvasHeight, engine, pieces);
       break;
@@ -46,18 +49,91 @@ export const renderTransition = (
 };
 
 // ═══════════════════════════════════════════════════════════════════════════
+// 🧹 SWEEP EFFECT RENDERER - افکت جاروزدن بدون نمایش جارو
+// ═══════════════════════════════════════════════════════════════════════════
+const renderSweep = (
+  ctx: CanvasRenderingContext2D,
+  progress: number,
+  width: number,
+  height: number,
+  engine: any,
+  pieces: any[],
+): void => {
+  if (!engine || typeof window === "undefined") return;
+  const Matter = (window as any).Matter;
+  if (!Matter) return;
+
+  const bodies = Matter.Composite.allBodies(engine.world);
+
+  ctx.save();
+
+  // ✅ رندر قطعات با اندازه کامل و دقیق - بدون هیچ تغییری
+  bodies.forEach((body: any) => {
+    if (body.isStatic) return;
+
+    const pieceId = body.pieceId;
+    const piece = pieces.find((p: any) => p.id === pieceId);
+    if (!piece) return;
+
+    ctx.save();
+
+    // محاسبه opacity بر اساس خروج از صفحه
+    let opacity = 1;
+    const fadeMargin = 250;
+
+    if (body.position.x < -fadeMargin || body.position.x > width + fadeMargin) {
+      const distance =
+        body.position.x < 0
+          ? Math.abs(body.position.x + fadeMargin)
+          : Math.abs(body.position.x - width - fadeMargin);
+      opacity = Math.max(0, 1 - distance / fadeMargin);
+    }
+
+    if (body.position.y < -fadeMargin || body.position.y > height + fadeMargin) {
+      const distanceY =
+        body.position.y < 0
+          ? Math.abs(body.position.y + fadeMargin)
+          : Math.abs(body.position.y - height - fadeMargin);
+      opacity = Math.min(opacity, Math.max(0, 1 - distanceY / fadeMargin));
+    }
+
+    ctx.globalAlpha = opacity;
+    ctx.translate(body.position.x, body.position.y);
+    ctx.rotate(body.angle);
+
+    // ✅ استفاده از cachedCanvas برای حفظ شکل دقیق قطعه
+    if (piece.cachedCanvas) {
+      ctx.drawImage(
+        piece.cachedCanvas,
+        -piece.pw / 2, // ✅ اندازه اصلی - بدون تغییر
+        -piece.ph / 2, // ✅ اندازه اصلی - بدون تغییر
+        piece.pw, // ✅ عرض اصلی - بدون تغییر
+        piece.ph, // ✅ ارتفاع اصلی - بدون تغییر
+      );
+    } else if (piece.img) {
+      // fallback: استفاده از تصویر اصلی
+      ctx.drawImage(
+        piece.img,
+        piece.sx,
+        piece.sy,
+        piece.sw,
+        piece.sh,
+        -piece.pw / 2, // ✅ اندازه اصلی - بدون تغییر
+        -piece.ph / 2, // ✅ اندازه اصلی - بدون تغییر
+        piece.pw, // ✅ عرض اصلی - بدون تغییر
+        piece.ph, // ✅ ارتفاع اصلی - بدون تغییر
+      );
+    }
+
+    ctx.restore();
+  });
+
+  ctx.restore();
+};
+
+// ═══════════════════════════════════════════════════════════════════════════
 // 🌬️ WIND EFFECT RENDERER - Three-Phase Wind Transition
 // ═══════════════════════════════════════════════════════════════════════════
-/**
- * 🎨 WIND RENDERER - FINAL VERSION
- *
- * ✅ استفاده از cachedCanvas برای حفظ شکل دقیق قطعات
- * ✅ بدون تغییر اندازه
- * ✅ رندر با اندازه اصلی
- */
-
-// این کد باید در فایل transitionRenderer.ts، تابع renderWind را جایگزین کند
-
 const renderWind = (
   ctx: CanvasRenderingContext2D,
   progress: number,
@@ -183,14 +259,7 @@ const renderWind = (
 
     // ✅ CRITICAL: استفاده از cachedCanvas برای حفظ شکل دقیق
     if (piece.cachedCanvas) {
-      // رندر با canvas ذخیره شده که شکل دقیق پازل را دارد
-      ctx.drawImage(
-        piece.cachedCanvas,
-        -piece.pw / 2, // ✅ دقیقاً همان اندازه اصلی
-        -piece.ph / 2, // ✅ دقیقاً همان اندازه اصلی
-        piece.pw, // ✅ عرض اصلی بدون تغییر
-        piece.ph, // ✅ ارتفاع اصلی بدون تغییر
-      );
+      ctx.drawImage(piece.cachedCanvas, -piece.pw / 2, -piece.ph / 2, piece.pw, piece.ph);
     } else if (piece.img) {
       // fallback: استفاده از تصویر اصلی
       ctx.drawImage(
@@ -199,10 +268,10 @@ const renderWind = (
         piece.sy,
         piece.sw,
         piece.sh,
-        -piece.pw / 2, // ✅ دقیقاً همان اندازه اصلی
-        -piece.ph / 2, // ✅ دقیقاً همان اندازه اصلی
-        piece.pw, // ✅ عرض اصلی بدون تغییر
-        piece.ph, // ✅ ارتفاع اصلی بدون تغییر
+        -piece.pw / 2,
+        -piece.ph / 2,
+        piece.pw,
+        piece.ph,
       );
     }
 

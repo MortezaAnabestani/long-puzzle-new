@@ -9,6 +9,7 @@ export enum TransitionType {
   TORNADO = "TORNADO",
   IMPLOSION = "IMPLOSION",
   SCATTER = "SCATTER",
+  SWEEP = "SWEEP",
 }
 
 export interface PuzzlePiece {

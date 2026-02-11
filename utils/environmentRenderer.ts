@@ -54,7 +54,7 @@ class EnvironmentRenderer {
     img: HTMLImageElement | null,
     elapsed: number,
     w: number,
-    h: number
+    h: number,
   ) {
     const t = elapsed / 1000;
 

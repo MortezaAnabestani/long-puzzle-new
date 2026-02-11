@@ -6,7 +6,7 @@ import {
   DEFAULT_TRANSITION_CONFIG,
 } from "./transitionTypes";
 
-import { windEffect } from "./effects/windEffect";
+import { sweepEffect } from "./effects/sweepEffect"; // 🧹 افکت جاروزدن جدید
 
 class TransitionEngine {
   private effects: Map<TransitionType, TransitionEffect>;
@@ -20,7 +20,7 @@ class TransitionEngine {
   constructor() {
     this.config = { ...DEFAULT_TRANSITION_CONFIG };
     this.effects = new Map([
-      [TransitionType.WIND, windEffect], // 🌬️ Three-phase wind transition
+      [TransitionType.SWEEP, sweepEffect], // 🧹 Natural sweeping motion (6s duration)
     ]);
   }
 
@@ -108,12 +108,17 @@ class TransitionEngine {
       const deltaTime = currentTime - this.lastUpdateTime;
       this.lastUpdateTime = currentTime;
 
-      // Update Matter.js engine
       // Apply wind forces if wind effect is active
       if ((this.currentEngine as any)._windForceApplier) {
         (this.currentEngine as any)._windForceApplier();
       }
 
+      // 🧹 Apply sweep forces if sweep effect is active
+      if ((this.currentEngine as any)._sweepForceApplier) {
+        (this.currentEngine as any)._sweepForceApplier();
+      }
+
+      // Update Matter.js engine
       Matter.Engine.update(this.currentEngine, deltaTime);
 
       this.animationFrameId = requestAnimationFrame(updateLoop);

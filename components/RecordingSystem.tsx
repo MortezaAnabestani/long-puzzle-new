@@ -214,7 +214,7 @@ const RecordingSystem: React.FC<RecordingSystemProps> = ({
 
       const mimeType =
         ["video/mp4;codecs=avc1", "video/webm;codecs=vp9", "video/webm"].find((t) =>
-          MediaRecorder.isTypeSupported(t)
+          MediaRecorder.isTypeSupported(t),
         ) || "video/webm";
       currentMimeType.current = mimeType;
 
@@ -231,7 +231,7 @@ const RecordingSystem: React.FC<RecordingSystemProps> = ({
       recorder.onstop = () => {
         const finalBlob = new Blob(chunksRef.current, { type: currentMimeType.current });
         console.log(
-          `📹 [RecordingSystem] Recording stopped! Blob size: ${(finalBlob.size / 1024 / 1024).toFixed(2)}MB`
+          `📹 [RecordingSystem] Recording stopped! Blob size: ${(finalBlob.size / 1024 / 1024).toFixed(2)}MB`,
         );
         console.log(`   Chunks collected: ${chunksRef.current.length}`);
         console.log(`   MIME type: ${currentMimeType.current}`);
