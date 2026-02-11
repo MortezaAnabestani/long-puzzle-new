@@ -1,16 +1,16 @@
 import { TransitionEffect, TransitionType, PuzzlePiece } from "../transitionTypes";
 
 /**
- * 🧹 SWEEP EFFECT - افکت جاروزدن طبیعی
+ * 🍂 LEAF SWEEP EFFECT - افکت جاروزدن برگ‌ها
  *
- * ✅ بدون نمایش جارو - فقط افکت جاروزدن
- * ✅ حفظ کامل اندازه قطعات
- * ✅ حرکت نرم و طبیعی
- * ✅ متغیرهای تصادفی
+ * ✅ شروع از یک گوشه تصادفی به سمت مخالف
+ * ✅ فیزیک شبیه به برگ (سبک، چرخان، با اصطکاک هوا)
+ * ✅ حرکت تدریجی و طبیعی طی ۵ ثانیه
+ * ✅ حفظ کامل ابعاد قطعات
  */
 export const sweepEffect: TransitionEffect = {
   type: TransitionType.SWEEP,
-  duration: 5000, // 6 ثانیه برای جاروزدن آرام‌تر
+  duration: 600, // ۵ ثانیه دقیق
 
   apply: (pieces: PuzzlePiece[], engine: any, canvasWidth: number, canvasHeight: number) => {
     if (!engine || typeof window === "undefined") return;
@@ -19,54 +19,100 @@ export const sweepEffect: TransitionEffect = {
 
     Matter.World.clear(engine.world, false);
 
-    // 🎲 متغیرهای تصادفی
-    const sweepDirection = Math.random() > 0.5 ? 1 : -1;
-    const sweepSpeed = 0.7 + Math.random() * 0.3; // آهسته‌تر: 0.7-1.0
-    const waveIntensity = 0.5 + Math.random() * 0.5; // شدت موج: 0.5-1.0
-    const startDelay = Math.random() * 0.3; // تأخیر شروع
+    // 🎲 تنظیمات جارو (انتخاب گوشه)
+    // 0: بالا-چپ | 1: بالا-راست | 2: پایین-راست | 3: پایین-چپ
+    const startCornerIndex = Math.floor(Math.random() * 4);
 
-    console.log(
-      `🧹 Sweep: ${sweepDirection === 1 ? "→" : "←"} | Speed: ${sweepSpeed.toFixed(2)} | Wave: ${waveIntensity.toFixed(2)}`,
-    );
+    // تعیین مختصات شروع جارو
+    let startX = 0;
+    let startY = 0;
+    // تعیین جهت کلی نیرو (به سمت گوشه مخالف)
+    let forceDirX = 1;
+    let forceDirY = 1;
 
-    // جاذبه بسیار کم
-    engine.world.gravity.y = 0.008;
+    switch (startCornerIndex) {
+      case 0: // Top-Left -> Bottom-Right
+        startX = 0;
+        startY = 0;
+        forceDirX = 1;
+        forceDirY = 1;
+        break;
+      case 1: // Top-Right -> Bottom-Left
+        startX = canvasWidth;
+        startY = 0;
+        forceDirX = -1;
+        forceDirY = 1;
+        break;
+      case 2: // Bottom-Right -> Top-Left
+        startX = canvasWidth;
+        startY = canvasHeight;
+        forceDirX = -1;
+        forceDirY = -1;
+        break;
+      case 3: // Bottom-Left -> Top-Right
+        startX = 0;
+        startY = canvasHeight;
+        forceDirX = 1;
+        forceDirY = -1;
+        break;
+    }
+
+    console.log(`🍂 Leaf Sweep starting from corner index: ${startCornerIndex}`);
+
+    // جاذبه صفر (نمای از بالا - قطعات روی زمین هستند)
+    // باد جارو آن‌ها را حرکت می‌دهد، نه جاذبه
     engine.world.gravity.x = 0;
+    engine.world.gravity.y = 0;
 
     const bodies: any[] = [];
+    // حداکثر فاصله قطری برای محاسبه زمان‌بندی موج
+    const maxDistance = Math.hypot(canvasWidth, canvasHeight);
 
     pieces.forEach((piece) => {
-      // ✅ حفظ کامل اندازه - بدون هیچ تغییری
-      const body = Matter.Bodies.rectangle(
-        piece.tx + piece.pw / 2,
-        piece.ty + piece.ph / 2,
-        piece.pw, // ✅ اندازه اصلی
-        piece.ph, // ✅ اندازه اصلی
-        {
-          restitution: 0.05,
-          friction: 0.4,
-          frictionAir: 0.03,
-          density: 0.0008,
-          collisionFilter: {
-            group: -1,
-            category: 0,
-            mask: 0,
-          },
-        },
-      );
+      // محاسبه مرکز قطعه
+      const cx = piece.tx + piece.pw / 2;
+      const cy = piece.ty + piece.ph / 2;
 
-      // محاسبه تأخیر بر اساس موقعیت
-      const normalizedX = sweepDirection === 1 ? piece.tx / canvasWidth : 1 - piece.tx / canvasWidth;
+      // فاصله این قطعه از گوشه شروع
+      const distFromStart = Math.hypot(cx - startX, cy - startY);
 
-      const normalizedY = piece.ty / canvasHeight;
-      const positionDelay = normalizedX * 0.5 + normalizedY * 0.1;
+      // 🍂 تنظیمات فیزیکی "برگ"
+      const body = Matter.Bodies.rectangle(cx, cy, piece.pw, piece.ph, {
+        // ۱. جهش (Restitution):
+        // برگ‌ها اصلاً نمی‌جهند. مقدار ۰.۱ باعث می‌شود وقتی به زمین یا هم می‌خورند، انرژی‌شان تلف شود.
+        restitution: 0.1,
 
-      (body as any)._sweepDelay = startDelay + positionDelay;
-      (body as any)._sweepDirection = sweepDirection;
-      (body as any)._sweepSpeed = sweepSpeed;
-      (body as any)._waveIntensity = waveIntensity;
-      (body as any)._rotationSpeed = 0.05 + Math.random() * 0.1;
-      (body as any)._verticalWave = Math.random() * Math.PI * 2;
+        // ۲. اصطکاک سطحی (Friction):
+        // افزایش به ۰.۴ برای اینکه روی زمین کمی "گیر" کنند و شبیه حرکت روی یخ نباشد.
+        friction: 0.5,
+
+        // ۳. مقاومت هوا (FrictionAir) - کلید طبیعی شدن:
+        // به جای یک عدد ثابت، برای هر قطعه یک عدد تصادفی بین ۰.۰۴ تا ۰.۱۲ در نظر می‌گیریم.
+        // این باعث می‌شود بعضی قطعات سریع‌تر جلو بروند و بعضی در هوا معلق بمانند.
+        frictionAir: 0.04 + Math.random() * 0.08,
+
+        // ۴. چگالی (Density):
+        // کاهش شدید چگالی (0.0004). برگ‌ها باید جرم بسیار کمی داشته باشند تا با کوچکترین نیرو شتاب بگیرند.
+        density: 0.0003,
+
+        // ۵. زاویه اولیه (Angle):
+        // قرار دادن زاویه روی ۰ غیرطبیعی است. با Math.random زاویه اولیه را نامنظم می‌کنیم.
+        angle: 0,
+
+        // ۶. اینرسی دورانی (Inertia):
+        // با ضرب کردن اینرسی در یک ضریب تصادفی، تعیین می‌کنیم که هر برگ چقدر راحت دور خودش بچرخد.
+        inertia: 1.2, // (اختیاری) اگر می‌خواهید چرخش کاملاً توسط کد شما کنترل شود
+
+        // ۷. فیلتر برخورد:
+        // برای اینکه قطعات مثل یک "توده" واقعی روی هم سوار شوند (اگر نیاز دارید)،
+        // اما برای پرفورمنس بالا در جارو زدن، همان تنظیم شما (عدم برخورد) عالیست.
+        collisionFilter: { group: -1, category: 0, mask: 0 },
+      });
+
+      // ذخیره متادیتای اختصاصی برای انیمیشن
+      (body as any)._distFromStart = distFromStart;
+      (body as any)._randomOffset = Math.random(); // برای ایجاد تفاوت بین قطعات
+      (body as any)._rotationDir = Math.random() > 0.5 ? 1 : -1;
 
       body.pieceId = piece.id;
       bodies.push(body);
@@ -74,85 +120,78 @@ export const sweepEffect: TransitionEffect = {
 
     Matter.World.add(engine.world, bodies);
 
+    // ذخیره وضعیت در انجین برای دسترسی در لوپ آپدیت
     (engine as any)._transitionType = "SWEEP";
     (engine as any)._transitionStartTime = Date.now();
     (engine as any)._physicsEnabled = true;
-    (engine as any)._sweepDirection = sweepDirection;
 
-    // تابع اعمال نیروی جاروزدن
+    // پارامترهای سراسری افکت
+    (engine as any)._sweepParams = {
+      startX,
+      startY,
+      forceDirX,
+      forceDirY,
+      maxDistance,
+      duration: 5000,
+    };
+
+    // 🌊 تابع اعمال نیروی موجی
     const applySweepForces = () => {
-      const elapsed = (Date.now() - (engine as any)._transitionStartTime) / 1000;
+      const now = Date.now();
+      const elapsed = now - (engine as any)._transitionStartTime;
+      const params = (engine as any)._sweepParams;
+
+      // پیشرفت کلی زمان (0 تا 1)
+      const progress = Math.min(elapsed / params.duration, 1);
+
+      // "موقعیت جارو": یک خط فرضی که جلو می‌رود
+      // کمی بیشتر از maxDistance می‌رویم تا مطمئن شویم همه خارج شدند
+      const currentWaveDistance = progress * (params.maxDistance * 1.5);
+
       const bodies = Matter.Composite.allBodies(engine.world);
 
       bodies.forEach((body: any) => {
         if (body.isStatic) return;
 
-        const delay = body._sweepDelay || 0;
-        const adjustedTime = elapsed - delay;
+        const dist = body._distFromStart;
+        const randomVar = body._randomOffset; // عدد تصادفی بین 0-1
 
-        if (adjustedTime < 0) return;
+        // 🎯 منطق فعال‌سازی:
+        // اگر موج جارو به موقعیت قطعه رسیده باشد
+        if (currentWaveDistance > dist - 100) {
+          // 100px زودتر شروع کن تا نرم باشد
 
-        const direction = body._sweepDirection || 1;
-        const speed = body._sweepSpeed || 1;
-        const waveIntensity = body._waveIntensity || 1;
-        const rotationSpeed = body._rotationSpeed || 0.08;
-        const verticalWave = body._verticalWave || 0;
+          // شدت نیرو (با دور شدن زمان، نیرو کمتر ولی مداوم می‌شود تا قطعه خارج شود)
+          // یک ضربه اولیه قوی (Impulse) و سپس باد مداوم
 
-        // فاز 1: شروع آرام (0-1s)
-        if (adjustedTime < 1.0) {
-          const progress = adjustedTime / 1.0;
-          const easeProgress = progress * progress; // ease in
+          const timeSinceHit = currentWaveDistance - dist;
+          let forceMagnitude = 0;
 
-          const horizontalForce = direction * 0.04 * easeProgress * speed;
-          const waveY = Math.sin(adjustedTime * Math.PI * 2 + verticalWave) * 0.008 * waveIntensity;
+          if (timeSinceHit > 0) {
+            // نیروی اصلی: ترکیب یک فشار مداوم و آشفتگی
+            // هرچه به انتهای زمان نزدیک می‌شویم، نیرو را حفظ می‌کنیم تا خارج شوند
+            forceMagnitude = 0.0009;
+          }
 
-          Matter.Body.applyForce(body, body.position, {
-            x: horizontalForce,
-            y: waveY,
-          });
+          // ایجاد "تلاطم" (Turbulence)
+          // قطعات نباید صاف بروند، باید مثل برگ تلو تلو بخورند
+          const noise = Math.sin(elapsed * 0.005 + randomVar * 10);
 
-          const angular = direction * 0.0003 * rotationSpeed * easeProgress;
-          Matter.Body.setAngularVelocity(body, body.angularVelocity + angular);
-        }
+          // بردار جهت اصلی + کمی انحراف تصادفی
+          const dirX = params.forceDirX + noise * 0.5;
+          const dirY = params.forceDirY + noise * 0.5; // * 0.5 یعنی انحراف کمتر در محور Y
 
-        // فاز 2: جاروزدن اصلی (1-4.5s)
-        else if (adjustedTime >= 1.0 && adjustedTime < 4.5) {
-          const phaseTime = adjustedTime - 1.0;
-          const phaseProgress = phaseTime / 3.5;
+          // اعمال نیرو
+          if (forceMagnitude > 0) {
+            Matter.Body.applyForce(body, body.position, {
+              x: dirX * forceMagnitude * (1 + randomVar), // سرعت‌های متفاوت
+              y: dirY * forceMagnitude * (1 + randomVar),
+            });
 
-          const baseForce = 0.08 + phaseProgress * 0.04;
-          const horizontalForce = direction * baseForce * speed;
-
-          const waveY = Math.sin(phaseTime * Math.PI * 1.5 + verticalWave) * 0.012 * waveIntensity;
-          const drift = Math.sin(phaseTime * Math.PI * 0.8) * 0.005;
-
-          Matter.Body.applyForce(body, body.position, {
-            x: horizontalForce,
-            y: waveY + drift,
-          });
-
-          const angular = direction * 0.0006 * rotationSpeed;
-          Matter.Body.setAngularVelocity(body, body.angularVelocity + angular);
-        }
-
-        // فاز 3: تسریع نهایی (4.5-6s)
-        else if (adjustedTime >= 4.5) {
-          const phaseTime = adjustedTime - 4.5;
-          const phaseProgress = phaseTime / 1.5;
-          const easeProgress = 1 - (1 - phaseProgress) * (1 - phaseProgress); // ease out
-
-          const acceleratedForce = 0.12 + easeProgress * 0.15;
-          const horizontalForce = direction * acceleratedForce * speed;
-
-          const waveY = Math.sin(phaseTime * Math.PI * 2.5 + verticalWave) * 0.01 * waveIntensity;
-
-          Matter.Body.applyForce(body, body.position, {
-            x: horizontalForce,
-            y: waveY - 0.008, // کمی به سمت بالا
-          });
-
-          const angular = direction * 0.001 * rotationSpeed * (1 + easeProgress);
-          Matter.Body.setAngularVelocity(body, body.angularVelocity + angular);
+            // 🌀 چرخش (برگ‌ها وقتی هل داده می‌شوند می‌چرخند)
+            const rotationForce = 0.0015 * body._rotationDir * (1 + Math.abs(noise));
+            Matter.Body.setAngularVelocity(body, body.angularVelocity + rotationForce);
+          }
         }
       });
     };

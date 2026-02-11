@@ -1,614 +1,219 @@
+import { TransitionEffect, TransitionType, PuzzlePiece } from "./transitionTypes";
+
 /**
- * 🎨 TRANSITION RENDERER PRO - UPGRADED
+ * 🧹 REALISTIC SWEEP EFFECT - افکت جاروزدن واقعی
  *
- * رندر کردن افکت‌های ترنزیشن با پشتیبانی کامل از فیزیک Matter.js
- * شامل: رندر قطعات، افکت‌های بصری پیشرفته، و fade out نهایی
- * بهینه‌سازی شده برای جذابیت بصری و سرگرمی
+ * ✅ شبیه‌سازی کامل فیزیک جاروزدن واقعی
+ * ✅ ضربه اولیه قوی + نیروی مداوم
+ * ✅ برخورد قطعات با یکدیگر (توده‌سازی)
+ * ✅ اصطکاک و لغزش واقعی روی زمین
+ * ✅ خروج کامل همه قطعات از محیط
  */
+export const sweepEffect: TransitionEffect = {
+  type: TransitionType.SWEEP,
+  duration: 5000, // ۵ ثانیه - زمان واقعی جاروزدن
 
-export const renderTransition = (
-  ctx: CanvasRenderingContext2D,
-  transitionType: string,
-  progress: number, // 0 to 1
-  canvasWidth: number,
-  canvasHeight: number,
-  engine: any, // Matter.js engine
-  pieces: any[], // آرایه قطعات اصلی برای رندر
-): void => {
-  if (progress >= 1) return;
+  apply: (pieces: PuzzlePiece[], engine: any, canvasWidth: number, canvasHeight: number) => {
+    if (!engine || typeof window === "undefined") return;
+    const Matter = (window as any).Matter;
+    if (!Matter) return;
 
-  switch (transitionType) {
-    case "SWEEP":
-      renderSweep(ctx, progress, canvasWidth, canvasHeight, engine, pieces);
-      break;
-    case "WIND":
-      renderWind(ctx, progress, canvasWidth, canvasHeight, engine, pieces);
-      break;
-    case "VORTEX":
-      renderVortex(ctx, progress, canvasWidth, canvasHeight, engine, pieces);
-      break;
-    case "WRECKING_BALL":
-      renderWreckingBall(ctx, progress, canvasWidth, canvasHeight, engine, pieces);
-      break;
-    case "CENTRIFUGE":
-      renderCentrifuge(ctx, progress, canvasWidth, canvasHeight, engine, pieces);
-      break;
-    case "REVERSE_GRAVITY":
-      renderReverseGravity(ctx, progress, canvasWidth, canvasHeight, engine, pieces);
-      break;
-  }
+    Matter.World.clear(engine.world, false);
 
-  // ✅ Fade out نهایی - فقط در آخرین 1 ثانیه (20% آخر از 5 ثانیه)
-  if (progress > 0.8) {
-    const fadeProgress = (progress - 0.8) / 0.2; // 0 to 1
-    ctx.globalAlpha = fadeProgress;
-    ctx.fillStyle = "#000000";
-    ctx.fillRect(0, 0, canvasWidth, canvasHeight);
-    ctx.globalAlpha = 1;
-  }
-};
+    // 🎲 انتخاب گوشه شروع (4 حالت ممکن)
+    const startCornerIndex = Math.floor(Math.random() * 4);
 
-// ═══════════════════════════════════════════════════════════════════════════
-// 🧹 SWEEP EFFECT RENDERER - افکت جاروزدن بدون نمایش جارو
-// ═══════════════════════════════════════════════════════════════════════════
-const renderSweep = (
-  ctx: CanvasRenderingContext2D,
-  progress: number,
-  width: number,
-  height: number,
-  engine: any,
-  pieces: any[],
-): void => {
-  if (!engine || typeof window === "undefined") return;
-  const Matter = (window as any).Matter;
-  if (!Matter) return;
+    let startX = 0,
+      startY = 0;
+    let exitX = 0,
+      exitY = 0; // نقطه خروج (گوشه مخالف)
+    let forceDirX = 1,
+      forceDirY = 1;
 
-  const bodies = Matter.Composite.allBodies(engine.world);
-
-  ctx.save();
-
-  // ✅ رندر قطعات با اندازه کامل و دقیق - بدون هیچ تغییری
-  bodies.forEach((body: any) => {
-    if (body.isStatic) return;
-
-    const pieceId = body.pieceId;
-    const piece = pieces.find((p: any) => p.id === pieceId);
-    if (!piece) return;
-
-    ctx.save();
-
-    // محاسبه opacity بر اساس خروج از صفحه
-    let opacity = 1;
-    const fadeMargin = 250;
-
-    if (body.position.x < -fadeMargin || body.position.x > width + fadeMargin) {
-      const distance =
-        body.position.x < 0
-          ? Math.abs(body.position.x + fadeMargin)
-          : Math.abs(body.position.x - width - fadeMargin);
-      opacity = Math.max(0, 1 - distance / fadeMargin);
+    switch (startCornerIndex) {
+      case 0: // بالا-چپ → پایین-راست
+        startX = 0;
+        startY = 0;
+        exitX = canvasWidth;
+        exitY = canvasHeight;
+        forceDirX = 1;
+        forceDirY = 1;
+        break;
+      case 1: // بالا-راست → پایین-چپ
+        startX = canvasWidth;
+        startY = 0;
+        exitX = 0;
+        exitY = canvasHeight;
+        forceDirX = -1;
+        forceDirY = 1;
+        break;
+      case 2: // پایین-راست → بالا-چپ
+        startX = canvasWidth;
+        startY = canvasHeight;
+        exitX = 0;
+        exitY = 0;
+        forceDirX = -1;
+        forceDirY = -1;
+        break;
+      case 3: // پایین-چپ → بالا-راست
+        startX = 0;
+        startY = canvasHeight;
+        exitX = canvasWidth;
+        exitY = 0;
+        forceDirX = 1;
+        forceDirY = -1;
+        break;
     }
 
-    if (body.position.y < -fadeMargin || body.position.y > height + fadeMargin) {
-      const distanceY =
-        body.position.y < 0
-          ? Math.abs(body.position.y + fadeMargin)
-          : Math.abs(body.position.y - height - fadeMargin);
-      opacity = Math.min(opacity, Math.max(0, 1 - distanceY / fadeMargin));
-    }
-
-    ctx.globalAlpha = opacity;
-    ctx.translate(body.position.x, body.position.y);
-    ctx.rotate(body.angle);
-
-    // ✅ استفاده از cachedCanvas برای حفظ شکل دقیق قطعه
-    if (piece.cachedCanvas) {
-      ctx.drawImage(
-        piece.cachedCanvas,
-        -piece.pw / 2, // ✅ اندازه اصلی - بدون تغییر
-        -piece.ph / 2, // ✅ اندازه اصلی - بدون تغییر
-        piece.pw, // ✅ عرض اصلی - بدون تغییر
-        piece.ph, // ✅ ارتفاع اصلی - بدون تغییر
-      );
-    } else if (piece.img) {
-      // fallback: استفاده از تصویر اصلی
-      ctx.drawImage(
-        piece.img,
-        piece.sx,
-        piece.sy,
-        piece.sw,
-        piece.sh,
-        -piece.pw / 2, // ✅ اندازه اصلی - بدون تغییر
-        -piece.ph / 2, // ✅ اندازه اصلی - بدون تغییر
-        piece.pw, // ✅ عرض اصلی - بدون تغییر
-        piece.ph, // ✅ ارتفاع اصلی - بدون تغییر
-      );
-    }
-
-    ctx.restore();
-  });
-
-  ctx.restore();
-};
-
-// ═══════════════════════════════════════════════════════════════════════════
-// 🌬️ WIND EFFECT RENDERER - Three-Phase Wind Transition
-// ═══════════════════════════════════════════════════════════════════════════
-const renderWind = (
-  ctx: CanvasRenderingContext2D,
-  progress: number,
-  width: number,
-  height: number,
-  engine: any,
-  pieces: any[],
-): void => {
-  if (!engine || typeof window === "undefined") return;
-  const Matter = (window as any).Matter;
-  if (!Matter) return;
-
-  const bodies = Matter.Composite.allBodies(engine.world);
-  const windDirection = (engine as any)._windDirection || 1;
-
-  ctx.save();
-
-  // 🌬️ خطوط باد
-  let windLineOpacity = 0;
-  let windLineCount = 5;
-  let windLineSpeed = 1;
-
-  if (progress < 0.3) {
-    windLineOpacity = 0.06 + progress * 0.2;
-    windLineCount = 2;
-    windLineSpeed = 0.6;
-  } else if (progress < 0.7) {
-    windLineOpacity = 0.1 + (progress - 0.3) * 0.15;
-    windLineCount = 4;
-    windLineSpeed = 1.2;
-  } else {
-    windLineOpacity = 0.12 + (progress - 0.7) * 0.18;
-    windLineCount = 7;
-    windLineSpeed = 2.5;
-  }
-
-  ctx.strokeStyle = `rgba(220, 235, 255, ${windLineOpacity})`;
-  ctx.lineWidth = 1.2;
-  ctx.lineCap = "round";
-
-  for (let i = 0; i < windLineCount; i++) {
-    const baseY = (height / (windLineCount + 1)) * (i + 1);
-    const y = baseY + ((progress * 60 * windLineSpeed) % (height / windLineCount));
-    const waveOffset = Math.sin(progress * Math.PI * 2.5 + i * 0.7) * 12;
-
-    ctx.beginPath();
-
-    const startX = windDirection > 0 ? -40 : width + 40;
-    const endX = windDirection > 0 ? width + 120 : -120;
-
-    const segments = 20;
-    for (let j = 0; j <= segments; j++) {
-      const t = j / segments;
-      const x = startX + (endX - startX) * t;
-      const wave1 = Math.sin(t * Math.PI * 2 + progress * Math.PI * 3) * waveOffset;
-      const wave2 = Math.sin(t * Math.PI * 3.5 + progress * Math.PI * 1.8) * (waveOffset * 0.25);
-      const yOffset = wave1 + wave2;
-
-      if (j === 0) ctx.moveTo(x, y + yOffset);
-      else ctx.lineTo(x, y + yOffset);
-    }
-
-    ctx.stroke();
-  }
-
-  // 🍃 ذرات کوچک
-  if (progress > 0.2) {
-    const particleOpacity = Math.min(0.25, (progress - 0.2) * 0.5);
-    const particleCount = Math.floor(progress * 12);
-
-    for (let i = 0; i < particleCount; i++) {
-      const seed = i * 157.3891;
-      const particleProgress = (progress * 1.8 + seed * 0.08) % 1;
-
-      const startX = windDirection > 0 ? -40 : width + 40;
-      const x = startX + windDirection * particleProgress * (width + 80);
-      const y = (seed * 11.3) % height;
-      const size = 0.8 + (seed % 1.5);
-
-      const alpha = particleOpacity * (1 - Math.abs(particleProgress - 0.5) * 2);
-      ctx.fillStyle = `rgba(200, 215, 230, ${alpha})`;
-
-      ctx.save();
-      ctx.translate(x, y);
-      ctx.rotate(progress * Math.PI * 2.5 + seed);
-      ctx.beginPath();
-      ctx.arc(0, 0, size, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.restore();
-    }
-  }
-
-  // ✅ رندر قطعات با اندازه دقیق
-  bodies.forEach((body: any) => {
-    if (body.isStatic) return;
-
-    const pieceId = body.pieceId;
-    const piece = pieces.find((p: any) => p.id === pieceId);
-    if (!piece) return;
-
-    ctx.save();
-
-    // opacity بر اساس خروج از صفحه
-    let opacity = 1;
-    const fadeMargin = 200;
-
-    if (body.position.x < -fadeMargin || body.position.x > width + fadeMargin) {
-      const distance =
-        body.position.x < 0
-          ? Math.abs(body.position.x + fadeMargin)
-          : Math.abs(body.position.x - width - fadeMargin);
-      opacity = Math.max(0, 1 - distance / fadeMargin);
-    }
-
-    if (body.position.y < -fadeMargin) {
-      const distance = Math.abs(body.position.y + fadeMargin);
-      opacity = Math.min(opacity, Math.max(0, 1 - distance / fadeMargin));
-    }
-
-    ctx.globalAlpha = opacity;
-    ctx.translate(body.position.x, body.position.y);
-    ctx.rotate(body.angle);
-
-    // ✅ CRITICAL: استفاده از cachedCanvas برای حفظ شکل دقیق
-    if (piece.cachedCanvas) {
-      ctx.drawImage(piece.cachedCanvas, -piece.pw / 2, -piece.ph / 2, piece.pw, piece.ph);
-    } else if (piece.img) {
-      // fallback: استفاده از تصویر اصلی
-      ctx.drawImage(
-        piece.img,
-        piece.sx,
-        piece.sy,
-        piece.sw,
-        piece.sh,
-        -piece.pw / 2,
-        -piece.ph / 2,
-        piece.pw,
-        piece.ph,
-      );
-    }
-
-    ctx.restore();
-  });
-
-  ctx.restore();
-};
-
-// ═══════════════════════════════════════════════════════════════════════════
-// 🌪️ VORTEX EFFECT RENDERER PRO
-// ═══════════════════════════════════════════════════════════════════════════
-const renderVortex = (
-  ctx: CanvasRenderingContext2D,
-  progress: number,
-  width: number,
-  height: number,
-  engine: any,
-  pieces: any[],
-): void => {
-  if (!engine || typeof window === "undefined") return;
-  const Matter = (window as any).Matter;
-  if (!Matter) return;
-
-  const bodies = Matter.Composite.allBodies(engine.world);
-  const vortexCenter = (engine as any)._vortexCenter || { x: width / 2, y: height / 2 };
-  const clockwise = (engine as any)._clockwise || 1;
-
-  ctx.save();
-
-  // 🌀 رسم افکت گردباد (خطوط مارپیچی متحرک)
-  const spiralCount = 5;
-  const maxRadius = Math.max(width, height) * 0.8;
-
-  ctx.strokeStyle = `rgba(100, 150, 255, ${0.4 * (1 - progress)})`;
-  ctx.lineWidth = 3;
-
-  for (let i = 0; i < spiralCount; i++) {
-    const angle = progress * Math.PI * 6 * clockwise + (i * Math.PI * 2) / spiralCount;
-    const radius = 30 + progress * maxRadius;
-
-    ctx.beginPath();
-
-    // رسم مارپیچ
-    for (let t = 0; t < Math.PI * 2; t += 0.1) {
-      const r = radius * (1 + (t / (Math.PI * 2)) * 0.5);
-      const x = vortexCenter.x + Math.cos(angle + t * clockwise) * r;
-      const y = vortexCenter.y + Math.sin(angle + t * clockwise) * r;
-
-      if (t === 0) {
-        ctx.moveTo(x, y);
-      } else {
-        ctx.lineTo(x, y);
-      }
-    }
-
-    ctx.stroke();
-  }
-
-  // ⭐ رسم ستاره‌های کوچک (برای جلوه بصری)
-  ctx.fillStyle = `rgba(150, 200, 255, ${0.6 * (1 - progress)})`;
-  for (let i = 0; i < 20; i++) {
-    const angle = (i / 20) * Math.PI * 2 + progress * Math.PI * 4;
-    const dist = 40 + ((progress * 200 + i * 15) % 400);
-    const x = vortexCenter.x + Math.cos(angle) * dist;
-    const y = vortexCenter.y + Math.sin(angle) * dist;
-
-    ctx.beginPath();
-    ctx.arc(x, y, 2 + Math.sin(progress * Math.PI * 10 + i) * 1, 0, Math.PI * 2);
-    ctx.fill();
-  }
-
-  // ✅ رندر قطعات - بدون تغییر رنگ یا opacity
-  bodies.forEach((body: any) => {
-    if (body.isStatic) return;
-
-    const pieceId = body.pieceId;
-    const piece = pieces.find((p: any) => p.id === pieceId);
-    if (!piece || !piece.img) return;
-
-    ctx.save();
-    // ✅ opacity همیشه 1 - بدون محو شدن تدریجی
-    ctx.globalAlpha = 1;
-
-    ctx.translate(body.position.x, body.position.y);
-    ctx.rotate(body.angle);
-
-    ctx.drawImage(
-      piece.img,
-      piece.sx,
-      piece.sy,
-      piece.sw,
-      piece.sh,
-      -piece.pw / 2,
-      -piece.ph / 2,
-      piece.pw,
-      piece.ph,
+    console.log(
+      `🧹 REALISTIC SWEEP: Starting from corner ${startCornerIndex} → Exit at (${exitX}, ${exitY})`,
     );
 
-    ctx.restore();
-  });
+    // 🌍 جاذبه صفر - نمای از بالا (قطعات روی زمین هستند)
+    engine.world.gravity.x = 0;
+    engine.world.gravity.y = 0;
 
-  ctx.restore();
-};
+    const bodies: any[] = [];
+    const maxDistance = Math.hypot(canvasWidth, canvasHeight);
 
-// ═══════════════════════════════════════════════════════════════════════════
-// 💥 WRECKING BALL EFFECT RENDERER PRO
-// ═══════════════════════════════════════════════════════════════════════════
-const renderWreckingBall = (
-  ctx: CanvasRenderingContext2D,
-  progress: number,
-  width: number,
-  height: number,
-  engine: any,
-  pieces: any[],
-): void => {
-  if (!engine || typeof window === "undefined") return;
-  const Matter = (window as any).Matter;
-  if (!Matter) return;
+    pieces.forEach((piece) => {
+      const cx = piece.tx + piece.pw / 2;
+      const cy = piece.ty + piece.ph / 2;
 
-  const bodies = Matter.Composite.allBodies(engine.world);
-  const wreckingBalls = (engine as any)._wreckingBalls || [];
+      // فاصله از نقطه شروع جارو
+      const distFromStart = Math.hypot(cx - startX, cy - startY);
 
-  ctx.save();
+      // 🍃 تنظیمات فیزیک واقعی برگ/آشغال روی زمین
+      const body = Matter.Bodies.rectangle(cx, cy, piece.pw, piece.ph, {
+        // جهش تقریباً صفر (برگ روی زمین نمی‌جهد)
+        restitution: 0.05,
 
-  // رندر قطعات - بدون تغییر رنگ
-  bodies.forEach((body: any) => {
-    if (body.isStatic || (body as any)._isBall) return;
+        // اصطکاک بالا - برگ‌ها روی زمین می‌لغزند ولی سریع متوقف می‌شوند
+        friction: 0.8,
 
-    const pieceId = body.pieceId;
-    const piece = pieces.find((p: any) => p.id === pieceId);
-    if (!piece || !piece.img) return;
+        // مقاومت هوا متوسط - برگ‌ها سبک هستند
+        frictionAir: 0.02,
 
-    ctx.save();
-    // ✅ opacity همیشه 1
-    ctx.globalAlpha = 1;
+        // چگالی پایین - برگ‌ها سبک هستند (ولی نه خیلی کم که پرواز کنند)
+        density: 0.001,
 
-    ctx.translate(body.position.x, body.position.y);
-    ctx.rotate(body.angle);
+        // زاویه اولیه تصادفی
+        angle: Math.random() * Math.PI * 2,
 
-    ctx.drawImage(
-      piece.img,
-      piece.sx,
-      piece.sy,
-      piece.sw,
-      piece.sh,
-      -piece.pw / 2,
-      -piece.ph / 2,
-      piece.pw,
-      piece.ph,
-    );
+        // 🔴 کلید اصلی: فعال کردن برخورد!
+        // برگ‌ها باید به هم بخورند و توده‌های کوچک بسازند
+        collisionFilter: {
+          group: 0, // همه در یک گروه
+          category: 1, // دسته یکسان
+          mask: 1, // با همدیگر برخورد می‌کنند
+        },
+      });
 
-    ctx.restore();
-  });
+      // متادیتا برای هر قطعه
+      (body as any)._distFromStart = distFromStart;
+      (body as any)._randomSeed = Math.random(); // برای تنوع
+      (body as any)._hasBeenHit = false; // آیا جارو به این قطعه خورده؟
+      (body as any)._rotationDir = Math.random() > 0.5 ? 1 : -1;
 
-  // رندر توپ(های) ویرانگر
-  wreckingBalls.forEach((ball: any, index: number) => {
-    if (!ball || progress > 0.8) return;
+      body.pieceId = piece.id;
+      bodies.push(body);
+    });
 
-    ctx.save();
-    ctx.globalAlpha = Math.max(0, 1 - progress * 1.5);
+    Matter.World.add(engine.world, bodies);
 
-    // سایه سه‌بعدی
-    ctx.shadowColor = "rgba(0, 0, 0, 0.6)";
-    ctx.shadowBlur = 25;
-    ctx.shadowOffsetX = 12;
-    ctx.shadowOffsetY = 12;
+    // ذخیره پارامترها برای استفاده در لوپ
+    (engine as any)._transitionType = "SWEEP";
+    (engine as any)._transitionStartTime = Date.now();
+    (engine as any)._physicsEnabled = true;
 
-    // بدنه توپ با گرادیان
-    ctx.beginPath();
-    const ballRadius = (ball as any)._ballRadius || 40;
-    ctx.arc(ball.position.x, ball.position.y, ballRadius, 0, Math.PI * 2);
+    (engine as any)._sweepParams = {
+      startX,
+      startY,
+      exitX,
+      exitY,
+      forceDirX,
+      forceDirY,
+      maxDistance,
+      duration: 5000,
+      // سرعت حرکت جارو (پیکسل در میلی‌ثانیه)
+      sweepSpeed: (maxDistance * 1.8) / 5000, // 1.8x فاصله در 5 ثانیه
+    };
 
-    const gradient = ctx.createRadialGradient(
-      ball.position.x - ballRadius * 0.3,
-      ball.position.y - ballRadius * 0.3,
-      ballRadius * 0.2,
-      ball.position.x,
-      ball.position.y,
-      ballRadius,
-    );
+    // 🧹 تابع اصلی: شبیه‌سازی جاروزدن واقعی
+    const applySweepForces = () => {
+      const now = Date.now();
+      const elapsed = now - (engine as any)._transitionStartTime;
+      const params = (engine as any)._sweepParams;
 
-    const color1 = index === 0 ? "#5D6D7E" : "#E74C3C";
-    const color2 = index === 0 ? "#1C2833" : "#922B21";
+      // موقعیت فعلی "جارو" (یک خط فرضی که از گوشه شروع می‌شود)
+      const currentSweepDistance = elapsed * params.sweepSpeed;
 
-    gradient.addColorStop(0, color1);
-    gradient.addColorStop(1, color2);
+      const bodies = Matter.Composite.allBodies(engine.world);
 
-    ctx.fillStyle = gradient;
-    ctx.fill();
+      bodies.forEach((body: any) => {
+        if (body.isStatic) return;
 
-    // outline ضخیم
-    ctx.strokeStyle = index === 0 ? "#34495E" : "#C0392B";
-    ctx.lineWidth = 4;
-    ctx.stroke();
+        const dist = body._distFromStart;
+        const seed = body._randomSeed;
 
-    // نقاط درخشان (highlights)
-    ctx.shadowBlur = 0;
-    ctx.fillStyle = "rgba(255, 255, 255, 0.3)";
-    ctx.beginPath();
-    ctx.arc(
-      ball.position.x - ballRadius * 0.4,
-      ball.position.y - ballRadius * 0.4,
-      ballRadius * 0.2,
-      0,
-      Math.PI * 2,
-    );
-    ctx.fill();
+        // 🎯 آیا جارو به این قطعه رسیده؟
+        const sweepReachedThisPiece = currentSweepDistance >= dist - 80;
 
-    ctx.restore();
-  });
+        if (sweepReachedThisPiece) {
+          // اولین بار که جارو می‌خورد - ضربه اولیه قوی
+          if (!body._hasBeenHit) {
+            body._hasBeenHit = true;
+            body._hitTime = elapsed;
 
-  ctx.restore();
-};
+            // 💥 ضربه اولیه جارو - نیرو خیلی قوی‌تر از قبل
+            const initialImpulse = 0.015 + seed * 0.01; // 15-25 برابر قبلی!
 
-// ═══════════════════════════════════════════════════════════════════════════
-// 🌀 CENTRIFUGE EFFECT RENDERER PRO
-// ═══════════════════════════════════════════════════════════════════════════
-const renderCentrifuge = (
-  ctx: CanvasRenderingContext2D,
-  progress: number,
-  width: number,
-  height: number,
-  engine: any,
-  pieces: any[],
-): void => {
-  if (!engine || typeof window === "undefined") return;
-  const Matter = (window as any).Matter;
-  if (!Matter) return;
+            // کمی پراکندگی تصادفی (برگ‌ها دقیقاً راست نمی‌روند)
+            const scatter = (Math.random() - 0.5) * 0.3;
 
-  const bodies = Matter.Composite.allBodies(engine.world);
-  const centrifugeCenter = (engine as any)._centrifugeCenter || { x: width / 2, y: height / 2 };
-  const clockwise = (engine as any)._clockwise || 1;
+            Matter.Body.applyForce(body, body.position, {
+              x: params.forceDirX * initialImpulse + scatter * Math.abs(params.forceDirY),
+              y: params.forceDirY * initialImpulse + scatter * Math.abs(params.forceDirX),
+            });
 
-  ctx.save();
+            // چرخش اولیه تند
+            const spinImpulse = (Math.random() - 0.5) * 0.15;
+            Matter.Body.setAngularVelocity(body, spinImpulse);
+          }
 
-  // 🌀 رسم خطوط چرخشی (اختیاری - برای جلوه بصری)
-  if (progress < 0.5) {
-    const opacity = (1 - progress / 0.5) * 0.3;
-    ctx.strokeStyle = `rgba(150, 150, 200, ${opacity})`;
-    ctx.lineWidth = 2;
+          // 🌊 نیروی مداوم جارو (فشار ثابت تا خارج شوند)
+          const timeSinceHit = elapsed - (body._hitTime || 0);
 
-    for (let i = 0; i < 8; i++) {
-      const angle = (i / 8) * Math.PI * 2 + progress * Math.PI * 4 * clockwise;
-      const radius = 50 + progress * 400;
+          // نیرو کم‌کم کاهش می‌یابد ولی هیچوقت صفر نمی‌شود
+          const continuousForce = 0.002 * Math.exp(-timeSinceHit / 1500);
 
-      ctx.beginPath();
-      ctx.moveTo(centrifugeCenter.x, centrifugeCenter.y);
-      ctx.lineTo(
-        centrifugeCenter.x + Math.cos(angle) * radius,
-        centrifugeCenter.y + Math.sin(angle) * radius,
-      );
-      ctx.stroke();
-    }
-  }
+          // اضافه کردن turbulence (تلاطم طبیعی)
+          const turbulence = Math.sin(elapsed * 0.003 + seed * 20) * 0.0005;
 
-  // رندر قطعات - بدون تغییر رنگ
-  bodies.forEach((body: any) => {
-    if (body.isStatic) return;
+          Matter.Body.applyForce(body, body.position, {
+            x: params.forceDirX * (continuousForce + Math.abs(turbulence)),
+            y: params.forceDirY * (continuousForce + turbulence),
+          });
 
-    const pieceId = body.pieceId;
-    const piece = pieces.find((p: any) => p.id === pieceId);
-    if (!piece || !piece.img) return;
+          // چرخش مداوم کمتر
+          const continuousSpin = 0.0003 * body._rotationDir * Math.sin(elapsed * 0.002);
+          Matter.Body.setAngularVelocity(body, body.angularVelocity * 0.98 + continuousSpin);
 
-    ctx.save();
-    // ✅ opacity همیشه 1
-    ctx.globalAlpha = 1;
+          // 🚀 فشار اضافی برای قطعاتی که نزدیک خروجی هستند
+          const distToExit = Math.hypot(body.position.x - params.exitX, body.position.y - params.exitY);
 
-    ctx.translate(body.position.x, body.position.y);
-    ctx.rotate(body.angle);
+          if (distToExit < 300 && timeSinceHit > 1000) {
+            // فشار قوی برای اطمینان از خروج
+            const exitBoost = 0.003;
+            Matter.Body.applyForce(body, body.position, {
+              x: params.forceDirX * exitBoost,
+              y: params.forceDirY * exitBoost,
+            });
+          }
+        }
+      });
+    };
 
-    ctx.drawImage(
-      piece.img,
-      piece.sx,
-      piece.sy,
-      piece.sw,
-      piece.sh,
-      -piece.pw / 2,
-      -piece.ph / 2,
-      piece.pw,
-      piece.ph,
-    );
-
-    ctx.restore();
-  });
-
-  ctx.restore();
-};
-
-// ═══════════════════════════════════════════════════════════════════════════
-// 🛸 REVERSE GRAVITY EFFECT RENDERER PRO
-// ═══════════════════════════════════════════════════════════════════════════
-const renderReverseGravity = (
-  ctx: CanvasRenderingContext2D,
-  progress: number,
-  width: number,
-  height: number,
-  engine: any,
-  pieces: any[],
-): void => {
-  if (!engine || typeof window === "undefined") return;
-  const Matter = (window as any).Matter;
-  if (!Matter) return;
-
-  const bodies = Matter.Composite.allBodies(engine.world);
-
-  ctx.save();
-
-  // رندر قطعات - بدون تغییر رنگ
-  bodies.forEach((body: any) => {
-    if (body.isStatic) return;
-
-    const pieceId = body.pieceId;
-    const piece = pieces.find((p: any) => p.id === pieceId);
-    if (!piece || !piece.img) return;
-
-    ctx.save();
-    // ✅ opacity همیشه 1
-    ctx.globalAlpha = 1;
-
-    ctx.translate(body.position.x, body.position.y);
-    ctx.rotate(body.angle);
-
-    ctx.drawImage(
-      piece.img,
-      piece.sx,
-      piece.sy,
-      piece.sw,
-      piece.sh,
-      -piece.pw / 2,
-      -piece.ph / 2,
-      piece.pw,
-      piece.ph,
-    );
-
-    ctx.restore();
-  });
-
-  ctx.restore();
+    (engine as any)._sweepForceApplier = applySweepForces;
+  },
 };
