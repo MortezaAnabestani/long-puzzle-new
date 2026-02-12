@@ -284,7 +284,7 @@ CHAPTER STRUCTURE (${chapterCount} chapters, each ~30 seconds):
 ${chapterInstructions}
 
 🔥 CRITICAL REQUIREMENTS FOR narrativeText:
-- MUST be 20-25 words (optimized for 30-second YouTube short-form vertical video)
+- MUST be 15-20 words MAXIMUM (optimized for 30-second YouTube short-form vertical video)
 - MUST contain ONLY semantically complete sentences
 - Each text MUST be a standalone, complete thought that makes sense on its own
 - NO incomplete sentences ending with: "of", "and", "the", "but", "however", "with", "که", "و", "با", etc.
@@ -309,7 +309,7 @@ Return ONLY valid JSON:
   "storyArc": { "hook": "string", "buildup": ["string","string","string"], "climax": "string", "reveal": "string", "conclusion": "string" },
   "keyFacts": ["string","string","string"],
   "chapters": [
-    { "index": 0, "title": "string", "narrativeText": "string (25-30 words, complete sentences only)", "imagePrompt": "string", "cliffhanger": "string", "keyFact": "string" }
+    { "index": 0, "title": "string", "narrativeText": "string (15-20 words MAX, complete sentences only)", "imagePrompt": "string", "cliffhanger": "string", "keyFact": "string" }
   ]
 }`,
       config: {

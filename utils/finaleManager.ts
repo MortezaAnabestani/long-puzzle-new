@@ -29,8 +29,9 @@ export const FINALE_PAUSE = 800; // پاز اولیه بعد از تکمیل پ�
 export const TRANSITION_DURATION = 5000; // مدت زمان ترنزیشن باد
 export const SLIDESHOW_DELAY = 500; // تاخیر قبل از شروع اسلایدشو
 export const SLIDE_DURATION = 800; // مدت زمان هر اسلاید
-export const TOTAL_SLIDES = 9; // تعداد اسلایدها
-export const SLIDESHOW_DURATION = TOTAL_SLIDES * SLIDE_DURATION; // 7200ms
+export const TOTAL_SLIDES = 16; // تعداد اسلایدها (برابر با تعداد پازل‌ها در ویدئو 8 دقیقه‌ای)
+export const SLIDESHOW_DURATION = TOTAL_SLIDES * SLIDE_DURATION; // 12800ms
+export const WAVE_DURATION = TRANSITION_DURATION; // مدت زمان wave effect (برابر با transition)
 
 // محاسبه زمان‌های کلیدی
 export const TRANSITION_START_TIME = FINALE_PAUSE;

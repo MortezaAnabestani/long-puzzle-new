@@ -227,11 +227,7 @@ const AppContent: React.FC = () => {
     console.log(`🏁 [App] handlePuzzleFinished - chapter ${state.currentChapterIndex + 1}`);
 
     // Snapshot برای slideshow
-    if (
-      canvasHandleRef.current &&
-      state.project &&
-      state.currentChapterIndex < state.project.chapters.length - 1
-    ) {
+    if (canvasHandleRef.current && state.project) {
       const canvas = canvasHandleRef.current.getCanvas();
       if (canvas) {
         const snapshot = new Image();

@@ -2,7 +2,7 @@ import { useRef, useEffect, useState, useCallback, useImperativeHandle, forwardR
 import { PieceShape, PieceMaterial, MovementType, PuzzleBackground } from "../types";
 import { usePuzzleLogic } from "../hooks/usePuzzleLogic";
 import { renderPuzzleFrame } from "../utils/puzzleRenderer";
-import { FINALE_PAUSE } from "../utils/finaleManager";
+import { FINALE_PAUSE, WAVE_DURATION, TOTAL_FINALE_DURATION } from "../utils/finaleManager";
 import { sonicEngine } from "../services/proceduralAudio";
 import { clearAllTrails } from "../utils/trailEffects";
 import PuzzleOverlay from "./puzzle/PuzzleOverlay";
@@ -327,18 +327,22 @@ const PuzzleCanvas = forwardRef<CanvasHandle, PuzzleCanvasProps>(
         if (isLastChapter) {
           const afterFinish = Math.max(0, elapsed - totalDuration);
 
+          // Play wave sound at the start of finale
           if (afterFinish > FINALE_PAUSE && !wavePlayedRef.current) {
             sonicEngine.play("WAVE", 2.5);
             wavePlayedRef.current = true;
           }
 
-          const explosionTime = totalDuration + FINALE_PAUSE + WAVE_DURATION + 1500;
-          if (elapsed >= explosionTime && !isPhysicsActiveRef.current) {
-            activatePhysics();
-          }
-
-          if (isPhysicsActiveRef.current && elapsed >= explosionTime + 10000) {
-            onFinished();
+          // Check if finale is complete (after slideshow + outro)
+          // TOTAL_FINALE_DURATION includes: pause + transition + slideshow
+          // Add 2 seconds for outro animation
+          const OUTRO_DURATION = 2000;
+          if (afterFinish >= TOTAL_FINALE_DURATION + OUTRO_DURATION) {
+            if (!puzzleFinishedCalledRef.current) {
+              puzzleFinishedCalledRef.current = true;
+              console.log(`🏁 [Canvas] Finale complete - calling onFinished`);
+              onFinished();
+            }
             return;
           }
         }
