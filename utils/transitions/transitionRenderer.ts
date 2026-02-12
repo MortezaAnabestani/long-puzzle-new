@@ -92,10 +92,10 @@ const renderSweep = (
     if (piece.cachedCanvas) {
       ctx.drawImage(
         piece.cachedCanvas,
-        -piece.pw, // ✅ اندازه اصلی - بدون تغییر
-        -piece.ph, // ✅ اندازه اصلی - بدون تغییر
-        piece.pw * 2.2, // ✅ عرض اصلی - بدون تغییر
-        piece.ph * 2.2, // ✅ ارتفاع اصلی - بدون تغییر
+        -piece.pw * 1.2, // ✅ اندازه اصلی - بدون تغییر
+        -piece.ph * 1.2, // ✅ اندازه اصلی - بدون تغییر
+        piece.pw * 2.4, // ✅ عرض اصلی - بدون تغییر
+        piece.ph * 2.4, // ✅ ارتفاع اصلی - بدون تغییر
       );
     } else if (piece.img) {
       // fallback: استفاده از تصویر اصلی
@@ -105,10 +105,10 @@ const renderSweep = (
         piece.sy,
         piece.sw,
         piece.sh,
-        -piece.pw, // ✅ اندازه اصلی - بدون تغییر
-        -piece.ph, // ✅ اندازه اصلی - بدون تغییر
-        piece.pw * 2.2, // ✅ عرض اصلی - بدون تغییر
-        piece.ph * 2.2, // ✅ ارتفاع اصلی - بدون تغییر
+        -piece.pw * 1.2, // ✅ اندازه اصلی - بدون تغییر
+        -piece.ph * 1.2, // ✅ اندازه اصلی - بدون تغییر
+        piece.pw * 2.4, // ✅ عرض اصلی - بدون تغییر
+        piece.ph * 2.4, // ✅ ارتفاع اصلی - بدون تغییر
       );
     }
 

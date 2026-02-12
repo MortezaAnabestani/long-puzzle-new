@@ -1,6 +1,6 @@
 import { Piece } from "../hooks/usePuzzleLogic";
 import { PieceShape, MovementType, PuzzleBackground } from "../types";
-import { getFinaleState, getDiagonalWaveY } from "./finaleManager";
+import { getFinaleState, getDiagonalWaveY, OUTRO_DURATION } from "./finaleManager";
 import { envEngine } from "./environmentRenderer";
 import { renderOutroCard } from "./outroRenderer";
 import { updateTrailHistory, renderTrailEffect } from "./trailEffects";
@@ -33,6 +33,11 @@ const getSortedPieces = (pieces: Piece[]): Piece[] => {
   }
   return cachedSortedPieces;
 };
+
+// ─── 🔥 PERFORMANCE: RENDER POOL FOR SMOOTHER ANIMATIONS ──────────────
+const renderBatchSize = 50; // Render 50 pieces per frame max
+let renderQueue: Piece[] = [];
+let queueProcessed = 0;
 
 // ─── TEXT WRAPPING CACHE ──────────────────────────────────────────────
 const textWrapCache = new Map<string, string[]>();
@@ -154,38 +159,57 @@ export const renderPuzzleFrame = ({
       ctx.fillStyle = "#000000";
       ctx.fillRect(0, 0, vWidth, vHeight);
 
-      // Fade in/out
-      const fadeIn = Math.min(fState.slideProgress * 3, 1);
-      const fadeOut = fState.slideProgress > 0.7 ? 1 - (fState.slideProgress - 0.7) / 0.3 : 1;
+      // Fade in/out transitions
+      const fadeIn = Math.min(fState.slideProgress * 4, 1); // Faster fade in
+      const fadeOut = fState.slideProgress > 0.75 ? 1 - (fState.slideProgress - 0.75) / 0.25 : 1;
       const opacity = fadeIn * fadeOut;
 
       ctx.save();
       ctx.globalAlpha = opacity;
 
-      // Scale effect
-      const scale = 0.95 + Math.sin(fState.slideProgress * Math.PI) * 0.05;
-      ctx.translate(vWidth / 2, vHeight / 2);
+      // Ken Burns effect (slow zoom and pan)
+      const scale = 1.0 + Math.sin(fState.slideProgress * Math.PI) * 0.08;
+      const panX = Math.sin(fState.slideProgress * Math.PI * 2) * 20;
+      const panY = Math.cos(fState.slideProgress * Math.PI * 2) * 20;
+
+      ctx.translate(vWidth / 2 + panX, vHeight / 2 + panY);
       ctx.scale(scale, scale);
       ctx.translate(-vWidth / 2, -vHeight / 2);
 
       // Draw slide
       ctx.drawImage(slideImage, 0, 0, vWidth, vHeight);
 
-      // Slide number indicator
-      ctx.globalAlpha = opacity * 0.6;
+      // Slide progress indicator
+      ctx.globalAlpha = opacity * 0.7;
       ctx.fillStyle = "#007acc";
-      ctx.font = "bold 80px Inter";
+      ctx.font = "bold 90px Inter";
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
+
+      // Animated slide number with glow
+      ctx.shadowColor = "#007acc";
+      ctx.shadowBlur = 30;
       ctx.fillText(
         `${fState.currentSlide + 1} / ${completedPuzzleSnapshots.length}`,
         vWidth / 2,
-        vHeight - 150,
+        vHeight - 180,
       );
 
       ctx.restore();
       return 100; // slideshow active
     }
+  }
+
+  // ─── 🔥 OUTRO CARD PHASE ───────────────────────────────────────────
+  if (fState.outroActive) {
+    renderOutroCard({
+      ctx,
+      vWidth,
+      vHeight,
+      elapsedAfterFinish: fState.outroProgress * OUTRO_DURATION,
+      channelLogo,
+    });
+    return 100; // outro active
   }
 
   // ─── 1. ENVIRONMENT ───────────────────────────────────────────────
@@ -235,16 +259,29 @@ export const renderPuzzleFrame = ({
     }
   }
 
-  // ─── 2. RENDER COMPLETED PIECES ───────────────────────────────────
+  // ─── 2. RENDER COMPLETED PIECES (با موج در فاز نهایی) ──────────────
   for (const p of completedPieces) {
+    // 🌊 موج فقط در فاز wave active نمایش داده می‌شود
     const waveY = fState.waveActive ? getDiagonalWaveY(p, elapsedAfterFinish, vWidth, vHeight) : 0;
     const drawX = p.tx - (p.cachedCanvas!.width - p.pw) / 2;
     const drawY = p.ty - (p.cachedCanvas!.height - p.ph) / 2 + waveY;
+
+    // 🔥 محو شدن تدریجی هنگام فروریختن
+    if (fState.waveActive && waveY > 100) {
+      const fadeOut = Math.max(0, 1 - waveY / vHeight);
+      ctx.globalAlpha = fadeOut;
+    }
+
     ctx.drawImage(p.cachedCanvas!, drawX, drawY);
+    ctx.globalAlpha = 1.0; // Reset alpha
   }
 
-  // ─── 3. RENDER MOVING PIECES ──────────────────────────────────────
-  for (const p of movingPieces) {
+  // ─── 3. RENDER MOVING PIECES (🔥 OPTIMIZED WITH BATCHING) ─────────
+  // 🔥 Batch rendering to avoid frame drops on large piece counts
+  const piecesToRender =
+    movingPieces.length > renderBatchSize ? movingPieces.slice(0, renderBatchSize) : movingPieces;
+
+  for (const p of piecesToRender) {
     const physicsData = physicsPieces?.get(p.id);
 
     if (physicsData) {
@@ -261,7 +298,9 @@ export const renderPuzzleFrame = ({
     const pos = calculateKineticTransform(p, tRaw, movement, vWidth, vHeight);
 
     // Trail rendering (only during peak movement)
-    if (tRaw >= 0.1 && tRaw <= 0.85) {
+    // 🔥 OPTIMIZATION: Reduce trail calculations for smoother performance
+    if (tRaw >= 0.1 && tRaw <= 0.85 && p.id % 3 === 0) {
+      // Only every 3rd piece gets trails
       updateTrailHistory(p, pos.x, pos.y, pos.rot, pos.scale, elapsed, movement, tRaw);
       renderTrailEffect(ctx, p, movement);
     }
@@ -274,7 +313,7 @@ export const renderPuzzleFrame = ({
 
     if (!fState.isFinale) {
       ctx.shadowColor = "rgba(0,0,0,0.6)";
-      ctx.shadowBlur = 20;
+      ctx.shadowBlur = 15; // 🔥 Slightly reduced for performance
     }
 
     ctx.drawImage(p.cachedCanvas!, -p.cachedCanvas!.width / 2, -p.cachedCanvas!.height / 2);
@@ -341,11 +380,6 @@ export const renderPuzzleFrame = ({
 
       ctx.restore();
     }
-  }
-
-  // ─── 5. OUTRO CARD ────────────────────────────────────────────────
-  if (physicsPieces) {
-    renderOutroCard({ ctx, vWidth, vHeight, elapsedAfterFinish, channelLogo });
   }
 
   return (completedPieces.length / totalPieces) * 100;

@@ -222,22 +222,9 @@ const AppContent: React.FC = () => {
     });
   }, [setState]);
 
-  // ─── ✅ PUZZLE FINISHED - FIXED ────────────────────────────────────
+  // ─── ✅ PUZZLE FINISHED - WITH PROPER SNAPSHOT HANDLING ───────────
   const handlePuzzleFinished = useCallback(() => {
     console.log(`🏁 [App] handlePuzzleFinished - chapter ${state.currentChapterIndex + 1}`);
-
-    // Snapshot برای slideshow
-    if (canvasHandleRef.current && state.project) {
-      const canvas = canvasHandleRef.current.getCanvas();
-      if (canvas) {
-        const snapshot = new Image();
-        snapshot.src = canvas.toDataURL("image/png");
-        snapshot.onload = () => {
-          completedPuzzleSnapshots.current.push(snapshot);
-          console.log(`📸 Snapshot ${completedPuzzleSnapshots.current.length} saved`);
-        };
-      }
-    }
 
     setState((s) => {
       if (!s.project) return s;
@@ -245,18 +232,53 @@ const AppContent: React.FC = () => {
       const nextIndex = s.currentChapterIndex + 1;
       const isCurrentlyLastChapter = s.currentChapterIndex === s.project.chapters.length - 1;
 
-      // ✅ FIX: اگر الان آخرین فصل است (فصل 9)
+      // 📸 CRITICAL: Snapshot باید قبل از هر عملیات دیگری گرفته شود
+      // از setTimeout استفاده می‌کنیم تا اطمینان حاصل کنیم canvas آماده است
+      setTimeout(() => {
+        if (canvasHandleRef.current) {
+          const canvas = canvasHandleRef.current.getCanvas();
+          if (canvas) {
+            try {
+              const snapshot = new Image();
+              snapshot.src = canvas.toDataURL("image/png");
+              snapshot.onload = () => {
+                completedPuzzleSnapshots.current.push(snapshot);
+                console.log(
+                  `📸 Snapshot ${completedPuzzleSnapshots.current.length}/${s.project?.chapters.length} saved for chapter ${s.currentChapterIndex + 1}`,
+                );
+
+                // 🎬 اگر فصل آخر است، لاگ اسلایدشو
+                if (isCurrentlyLastChapter) {
+                  console.log(
+                    `🎬 [App] All ${completedPuzzleSnapshots.current.length} snapshots ready for slideshow`,
+                  );
+                }
+              };
+              snapshot.onerror = () => {
+                console.error(`❌ [App] Failed to load snapshot for chapter ${s.currentChapterIndex + 1}`);
+              };
+            } catch (err) {
+              console.error(`❌ [App] Error capturing snapshot:`, err);
+            }
+          } else {
+            console.warn(`⚠️ [App] Canvas not available for snapshot`);
+          }
+        }
+      }, 100); // کمی صبر می‌کنیم تا render نهایی انجام شود
+
+      // ✅ FIX: اگر الان آخرین فصل است
       if (isCurrentlyLastChapter) {
         console.log(
-          `🏁 [App] Last chapter (${s.currentChapterIndex + 1}) finished - finale will handle rest`,
+          `🏁 [App] Last chapter (${s.currentChapterIndex + 1}) finished - finale sequence will continue`,
         );
-        // فقط وضعیت را به‌روز کن، onFinished را PuzzleCanvas صدا می‌زند
+        // در فصل آخر، فقط وضعیت را نگه می‌داریم
+        // PuzzleCanvas خودش مراحل finale را مدیریت می‌کند
         return s;
       }
 
       // ✅ اگر هنوز فصل دیگری باقی مانده
       if (nextIndex < s.project.chapters.length) {
-        console.log(`🎬 [App] Starting transition for chapter ${nextIndex + 1}`);
+        console.log(`🎬 [App] Starting transition to chapter ${nextIndex + 1}`);
         return {
           ...s,
           isTransitioning: true,

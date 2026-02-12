@@ -2,7 +2,12 @@ import { useRef, useEffect, useState, useCallback, useImperativeHandle, forwardR
 import { PieceShape, PieceMaterial, MovementType, PuzzleBackground } from "../types";
 import { usePuzzleLogic } from "../hooks/usePuzzleLogic";
 import { renderPuzzleFrame } from "../utils/puzzleRenderer";
-import { FINALE_PAUSE, WAVE_DURATION, TOTAL_FINALE_DURATION } from "../utils/finaleManager";
+import {
+  FINALE_PAUSE,
+  WAVE_DURATION,
+  TOTAL_FINALE_DURATION,
+  logFinaleTimeline,
+} from "../utils/finaleManager";
 import { sonicEngine } from "../services/proceduralAudio";
 import { clearAllTrails } from "../utils/trailEffects";
 import PuzzleOverlay from "./puzzle/PuzzleOverlay";
@@ -327,20 +332,26 @@ const PuzzleCanvas = forwardRef<CanvasHandle, PuzzleCanvasProps>(
         if (isLastChapter) {
           const afterFinish = Math.max(0, elapsed - totalDuration);
 
-          // Play wave sound at the start of finale
-          if (afterFinish > FINALE_PAUSE && !wavePlayedRef.current) {
-            sonicEngine.play("WAVE", 2.5);
-            wavePlayedRef.current = true;
+          // Log finale timeline on first entry (debug)
+          if (afterFinish === 0 && !wavePlayedRef.current) {
+            console.log(`🎬 [Canvas] Starting finale sequence`);
+            logFinaleTimeline();
           }
 
-          // Check if finale is complete (after slideshow + outro)
-          // TOTAL_FINALE_DURATION includes: pause + transition + slideshow
-          // Add 2 seconds for outro animation
-          const OUTRO_DURATION = 2000;
-          if (afterFinish >= TOTAL_FINALE_DURATION + OUTRO_DURATION) {
+          // Play wave sound at the start of wave effect
+          if (afterFinish > FINALE_PAUSE && afterFinish < FINALE_PAUSE + 100 && !wavePlayedRef.current) {
+            sonicEngine.play("WAVE", 2.5);
+            wavePlayedRef.current = true;
+            console.log(`🌊 [Canvas] Wave sound triggered at ${afterFinish}ms`);
+          }
+
+          // Check if finale is complete (using new TOTAL_FINALE_DURATION)
+          if (afterFinish >= TOTAL_FINALE_DURATION) {
             if (!puzzleFinishedCalledRef.current) {
               puzzleFinishedCalledRef.current = true;
-              console.log(`🏁 [Canvas] Finale complete - calling onFinished`);
+              console.log(`🏁 [Canvas] Finale complete at ${afterFinish}ms - calling onFinished`);
+              console.log(`   Wave duration: ${WAVE_DURATION}ms`);
+              console.log(`   Total finale: ${TOTAL_FINALE_DURATION}ms`);
               onFinished();
             }
             return;
