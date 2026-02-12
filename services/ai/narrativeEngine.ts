@@ -284,16 +284,21 @@ CHAPTER STRUCTURE (${chapterCount} chapters, each ~30 seconds):
 ${chapterInstructions}
 
 🔥 CRITICAL REQUIREMENTS FOR narrativeText:
-- MUST be 15-20 words MAXIMUM (optimized for 30-second YouTube short-form vertical video)
-- MUST contain ONLY semantically complete sentences
+- MUST be 25-35 words MAXIMUM (optimized for 30-second YouTube short-form vertical video with natural pacing)
+- MUST contain ONLY semantically complete sentences with full meaning
 - Each text MUST be a standalone, complete thought that makes sense on its own
-- NO incomplete sentences ending with: "of", "and", "the", "but", "however", "with", "که", "و", "با", etc.
-- Each sentence MUST end with proper punctuation (. ! ? ؟ !)
-- Persian text MUST follow proper grammar and end with complete thoughts
-- If a sentence would be incomplete, finish it completely or remove it entirely
-- Ideal structure: 2-3 complete sentences that flow naturally
-- Display time: ~3-4 seconds per text box
-- Must be self-contained and independently understandable
+- ABSOLUTELY NO incomplete sentences ending with: "of", "and", "the", "but", "however", "with", "که", "و", "با", "در", "به", "از", "تا", "برای", etc.
+- Each sentence MUST end with proper punctuation (. ! ? ؟ !) and express a complete idea
+- Persian text MUST follow proper grammar and end with complete thoughts that can stand alone
+- If a sentence would be incomplete, ALWAYS finish it completely with proper closure
+- Ideal structure: 2-3 complete sentences that flow naturally and tell a mini-story
+- Display time: ~3-5 seconds per text box (gives comfortable reading time)
+- Must be self-contained and independently understandable without context
+- EXAMPLES OF COMPLETE vs INCOMPLETE:
+  ❌ INCOMPLETE: "در سال 1920، کشفی عجیب در مصر" (ends with "در" - incomplete)
+  ✅ COMPLETE: "در سال 1920، کشفی عجیب در مصر تاریخ را تغییر داد." (full idea)
+  ❌ INCOMPLETE: "Scientists discovered that the ancient city was" (ends with "was" - incomplete)
+  ✅ COMPLETE: "Scientists discovered that the ancient city was over 5000 years old." (full idea)
 
 OTHER REQUIREMENTS:
 - All ${chapterCount} chapters tell ONE continuous, coherent story
@@ -309,7 +314,7 @@ Return ONLY valid JSON:
   "storyArc": { "hook": "string", "buildup": ["string","string","string"], "climax": "string", "reveal": "string", "conclusion": "string" },
   "keyFacts": ["string","string","string"],
   "chapters": [
-    { "index": 0, "title": "string", "narrativeText": "string (15-20 words MAX, complete sentences only)", "imagePrompt": "string", "cliffhanger": "string", "keyFact": "string" }
+    { "index": 0, "title": "string", "narrativeText": "string (25-35 words MAX, ONLY complete sentences)", "imagePrompt": "string", "cliffhanger": "string", "keyFact": "string" }
   ]
 }`,
       config: {

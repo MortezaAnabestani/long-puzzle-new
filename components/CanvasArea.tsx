@@ -18,6 +18,7 @@ interface CanvasAreaProps {
   channelLogoUrl: string | null;
   onProgress: (p: number) => void;
   onFinished: () => void;
+  onFinaleComplete: () => void; // ✅ NEW: callback بعد از اتمام finale
   onTransitionComplete: () => void; // ✅ NEW: callback بعد از اتمام ترنزیشن
   onToggleSolve: () => void;
   narrativeText: string;
@@ -43,6 +44,7 @@ const CanvasArea: React.FC<CanvasAreaProps> = ({
   channelLogoUrl,
   onProgress,
   onFinished,
+  onFinaleComplete,
   onTransitionComplete,
   onToggleSolve,
   narrativeText,
@@ -117,6 +119,7 @@ const CanvasArea: React.FC<CanvasAreaProps> = ({
                 onProgress={onProgress}
                 isSolving={isColoring}
                 onFinished={onFinished}
+                onFinaleComplete={onFinaleComplete}
                 onTransitionComplete={onTransitionComplete}
                 onToggleSolve={onToggleSolve}
                 narrativeText={narrativeText}

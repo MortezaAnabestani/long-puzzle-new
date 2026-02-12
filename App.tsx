@@ -222,6 +222,20 @@ const AppContent: React.FC = () => {
     });
   }, [setState]);
 
+  // ─── ✅ FINALE COMPLETE - STOP RECORDING ──────────────────────────
+  const handleFinaleComplete = useCallback(() => {
+    console.log(`🎬🏁 [App] handleFinaleComplete - All finale sequences finished, stopping recording...`);
+
+    setState((s) => {
+      console.log(`   🎥 Setting isRecording = false to trigger video save`);
+      return {
+        ...s,
+        isRecording: false,
+        isSolving: false,
+      };
+    });
+  }, [setState]);
+
   // ─── ✅ PUZZLE FINISHED - WITH PROPER SNAPSHOT HANDLING ───────────
   const handlePuzzleFinished = useCallback(() => {
     console.log(`🏁 [App] handlePuzzleFinished - chapter ${state.currentChapterIndex + 1}`);
@@ -272,7 +286,7 @@ const AppContent: React.FC = () => {
           `🏁 [App] Last chapter (${s.currentChapterIndex + 1}) finished - finale sequence will continue`,
         );
         // در فصل آخر، فقط وضعیت را نگه می‌داریم
-        // PuzzleCanvas خودش مراحل finale را مدیریت می‌کند
+        // PuzzleCanvas خودش مراحل finale را مدیریت می‌کند و سپس handleFinaleComplete را صدا می‌زند
         return s;
       }
 
@@ -469,6 +483,7 @@ const AppContent: React.FC = () => {
             channelLogoUrl={channelLogoUrl}
             onProgress={(p) => setState((prev) => ({ ...prev, progress: p }))}
             onFinished={handlePuzzleFinished}
+            onFinaleComplete={handleFinaleComplete}
             onTransitionComplete={handleTransitionComplete}
             onToggleSolve={handleToggleSolve}
             narrativeText={currentChapter?.narrativeText ?? ""}
