@@ -177,24 +177,16 @@ const AppContent: React.FC = () => {
 
       const nextIndex = s.currentChapterIndex + 1;
 
-      // ✅ آخرین فصل بود
-      if (nextIndex >= s.project.chapters.length) {
-        console.log(`🏁 [App] Was last chapter - stopping`);
-        if (audioRef.current) pauseWithFade(audioRef.current, { duration: 2000 });
-        return {
-          ...s,
-          isSolving: false,
-          isRecording: false,
-          isTransitioning: false,
-          pipelineStep: "PACKAGING",
-          project: {
-            ...s.project,
-            status: ProjectStatus.COMPLETED,
-            chapters: s.project.chapters.map((ch, i) =>
-              i === s.currentChapterIndex ? { ...ch, status: ChapterStatus.COMPLETED } : ch,
-            ),
-          },
-        };
+      // ✅ CRITICAL FIX: Never stop recording here!
+      // Recording should continue through ALL chapters including the last one
+      // It will be stopped in handleFinaleComplete after finale sequence
+
+      // Check if we're past the last chapter (should not happen in normal flow)
+      if (nextIndex > s.project.chapters.length) {
+        console.error(
+          `❌ [App] Unexpected: nextIndex ${nextIndex} > chapters.length ${s.project.chapters.length}`,
+        );
+        return s;
       }
 
       console.log(`✅ [App] Advancing to chapter ${nextIndex + 1}/${s.project.chapters.length}`);
@@ -203,13 +195,14 @@ const AppContent: React.FC = () => {
       setShowChapterInfo(true);
       setTimeout(() => setShowChapterInfo(false), 2000);
 
-      // ✅ پیشروی به فصل بعد
+      // ✅ پیشروی به فصل بعد - KEEP RECORDING
       return {
         ...s,
         currentChapterIndex: nextIndex,
         isTransitioning: false,
         progress: 0,
         isSolving: true,
+        // ✅ isRecording stays TRUE (will be stopped in handleFinaleComplete)
         project: {
           ...s.project,
           chapters: s.project.chapters.map((ch, i) => {
@@ -228,10 +221,22 @@ const AppContent: React.FC = () => {
 
     setState((s) => {
       console.log(`   🎥 Setting isRecording = false to trigger video save`);
+      console.log(`   📦 Setting pipelineStep = PACKAGING to trigger download`);
+
+      // ✅ Also fade out audio
+      if (audioRef.current) pauseWithFade(audioRef.current, { duration: 2000 });
+
       return {
         ...s,
         isRecording: false,
         isSolving: false,
+        pipelineStep: "PACKAGING", // ✅ CRITICAL: trigger executePackaging useEffect
+        project: s.project
+          ? {
+              ...s.project,
+              status: ProjectStatus.COMPLETED,
+            }
+          : s.project,
       };
     });
   }, [setState]);

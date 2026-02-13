@@ -158,29 +158,36 @@ const PuzzleCanvas = forwardRef<CanvasHandle, PuzzleCanvasProps>(
         destructionPlayedRef.current = true;
       }
 
-      const remainingPieces = piecesRef.current
-        .sort(() => Math.random() - 0.5)
-        .slice(0, Math.floor(piecesRef.current.length * 0.7));
+      // ✅ Use ALL pieces for realistic collapse (not just 70%)
+      const allPieces = piecesRef.current;
 
       const bodies: any[] = [];
-      remainingPieces.forEach((p) => {
+      allPieces.forEach((p) => {
+        // Create physics body for each piece
         const body = Matter.Bodies.rectangle(p.tx + p.pw / 2, p.ty + p.ph / 2, p.pw, p.ph, {
-          restitution: 0.6,
+          restitution: 0.6, // Bounciness
           friction: 0.1,
-          angle: (Math.random() - 0.5) * 0.5,
+          angle: (Math.random() - 0.5) * 0.5, // Random initial rotation
         });
+
+        // Apply outward explosive force from center
         const dx = p.tx + p.pw / 2 - vWidth / 2;
         const dy = p.ty + p.ph / 2 - vHeight / 2;
         const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+
+        // Stronger outward force for more dramatic collapse
         Matter.Body.applyForce(body, body.position, {
-          x: (dx / dist) * 0.16 * Math.random(),
-          y: (dy / dist) * 0.16 * Math.random() - 0.08,
+          x: (dx / dist) * 0.22 * (0.8 + Math.random() * 0.4), // Varied strength
+          y: (dy / dist) * 0.22 * (0.8 + Math.random() * 0.4) - 0.12, // With upward component
         });
+
         bodies.push(body);
         bodiesRef.current.set(p.id, body);
       });
+
       Matter.World.add(engineRef.current.world, bodies);
-      piecesRef.current = remainingPieces;
+      // ✅ Keep all pieces (don't reduce piecesRef)
+      // piecesRef.current stays the same
     }, [piecesRef, getMatter, vWidth, vHeight]);
 
     // ─── CLEANUP ────────────────────────────────────────────────────
@@ -328,43 +335,40 @@ const PuzzleCanvas = forwardRef<CanvasHandle, PuzzleCanvasProps>(
         }
 
         // ✅ PUZZLE COMPLETE → onFinished (فقط یک بار)
-        if (elapsed >= totalDuration && !puzzleFinishedCalledRef.current && !isLastChapter) {
+        // For last chapter: call onFinished IMMEDIATELY to capture snapshot
+        // Then finale sequence will continue automatically
+        if (elapsed >= totalDuration && !puzzleFinishedCalledRef.current) {
           puzzleFinishedCalledRef.current = true;
-          console.log(`🏁 [Canvas] Puzzle finished - calling onFinished`);
+          console.log(`🏁 [Canvas] Puzzle finished - calling onFinished (isLastChapter: ${isLastChapter})`);
           onFinished();
         }
 
-        // Last chapter finale
+        // ✅ Last chapter finale - Simple wave + collapse + slideshow + outro
         if (isLastChapter) {
           const afterFinish = Math.max(0, elapsed - totalDuration);
 
-          // Log finale timeline on first entry (debug)
+          // Log finale timeline on first entry
           if (afterFinish === 0 && !wavePlayedRef.current) {
             console.log(`🎬 [Canvas] Starting finale sequence`);
             logFinaleTimeline();
           }
 
-          // ✅ PHASE 1: Play wave sound at the start of wave effect
-          if (afterFinish > FINALE_PAUSE && afterFinish < FINALE_PAUSE + 100 && !wavePlayedRef.current) {
+          // ✅ WAVE: starts after FINALE_PAUSE
+          if (afterFinish > FINALE_PAUSE && !wavePlayedRef.current) {
             sonicEngine.play("WAVE", 2.5);
             wavePlayedRef.current = true;
-            console.log(`🌊 [Canvas] Wave sound triggered at ${afterFinish}ms`);
+            console.log(`🌊 [Canvas] Wave sound triggered at ${afterFinish.toFixed(0)}ms`);
           }
 
-          // ✅ PHASE 2: Activate physics for collapse (in the middle of wave)
-          const PHYSICS_ACTIVATION_TIME = FINALE_PAUSE + 1500; // 1.5s after wave starts
-          if (
-            afterFinish > PHYSICS_ACTIVATION_TIME &&
-            afterFinish < PHYSICS_ACTIVATION_TIME + 100 &&
-            !physicsActivatedRef.current
-          ) {
+          // ✅ PHYSICS COLLAPSE: triggered after wave completes + delay
+          const explosionTriggerTime = FINALE_PAUSE + WAVE_DURATION + 1500;
+          if (afterFinish >= explosionTriggerTime && !physicsActivatedRef.current) {
             physicsActivatedRef.current = true;
             activatePhysics();
-            console.log(`💥 [Canvas] Physics activated for collapse at ${afterFinish}ms`);
+            console.log(`💥 [Canvas] Physics activated for collapse at ${afterFinish.toFixed(0)}ms`);
           }
 
-          // ✅ IMPORTANT: Don't return here - let render continue for slideshow & outro
-          // Completion check will happen AFTER render
+          // Continue rendering - slideshow & outro handled in renderer
         }
 
         // Physics update
@@ -444,25 +448,20 @@ const PuzzleCanvas = forwardRef<CanvasHandle, PuzzleCanvasProps>(
           const afterFinish = Math.max(0, elapsed - totalDuration);
 
           if (afterFinish >= TOTAL_FINALE_DURATION) {
-            if (!puzzleFinishedCalledRef.current) {
-              puzzleFinishedCalledRef.current = true;
-              console.log(`🏁 [Canvas] Finale complete at ${afterFinish}ms - calling onFinished`);
-              console.log(`   Wave duration: ${WAVE_DURATION}ms`);
-              console.log(`   Total finale: ${TOTAL_FINALE_DURATION}ms`);
-              onFinished();
-            }
-
             // ✅ Call onFinaleComplete to stop recording and trigger video save
             if (!finaleCompleteCalledRef.current) {
               finaleCompleteCalledRef.current = true;
-              console.log(`🎬🏁 [Canvas] FINALE FULLY COMPLETE - calling onFinaleComplete to stop recording`);
+              console.log(
+                `🎬🏁 [Canvas] FINALE FULLY COMPLETE at ${afterFinish}ms - calling onFinaleComplete to stop recording`,
+              );
+              console.log(`   Total finale duration: ${TOTAL_FINALE_DURATION}ms`);
               onFinaleComplete();
             }
 
-            // ✅ Continue loop one more time to render the final frame, then stop
-            if (puzzleFinishedCalledRef.current && finaleCompleteCalledRef.current) {
+            // ✅ Stop loop after callback is called
+            if (finaleCompleteCalledRef.current) {
               console.log(`🛑 [Canvas] Stopping render loop after finale completion`);
-              return; // Stop loop AFTER callbacks are called
+              return; // Stop loop AFTER callback is called
             }
           }
         }

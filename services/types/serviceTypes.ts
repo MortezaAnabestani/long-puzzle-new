@@ -101,6 +101,8 @@ export interface DocumentaryMetadata {
   hashtags: string[];
   ctr_strategy: string;
   chapterMarkers: ChapterMarker[];
+  fullScript?: string; // ✅ سناریو کامل 14 فصل
+  thumbnailUrl?: string; // ✅ لینک thumbnail
 }
 
 // ─── FULL CONTENT PACKAGE ─────────────────────────────────────────────

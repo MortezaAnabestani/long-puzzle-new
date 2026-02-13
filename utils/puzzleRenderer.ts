@@ -328,12 +328,32 @@ export const renderPuzzleFrame = ({
 
     let displayText = "";
 
-    // Split narrative into 3 parts
-    const words = narrativeText.split(" ");
-    const third = Math.ceil(words.length / 3);
-    const part1 = words.slice(0, third).join(" ");
-    const part2 = words.slice(third, third * 2).join(" ");
-    const part3 = words.slice(third * 2).join(" ");
+    // ✅ Split narrative into 3 parts BY SENTENCES (not words)
+    // This ensures each text box contains complete sentences with full meaning
+    const sentences = narrativeText.split(/([.!؟?]+)/g).filter((s) => s.trim());
+
+    // Reconstruct full sentences (sentence + punctuation)
+    const fullSentences: string[] = [];
+    for (let i = 0; i < sentences.length; i += 2) {
+      if (i + 1 < sentences.length) {
+        fullSentences.push(sentences[i] + sentences[i + 1]);
+      } else {
+        fullSentences.push(sentences[i]);
+      }
+    }
+
+    // Distribute sentences evenly across 3 parts
+    const sentenceCount = fullSentences.length;
+    const third = Math.ceil(sentenceCount / 3);
+    const part1 = fullSentences.slice(0, third).join(" ").trim();
+    const part2 = fullSentences
+      .slice(third, third * 2)
+      .join(" ")
+      .trim();
+    const part3 = fullSentences
+      .slice(third * 2)
+      .join(" ")
+      .trim();
 
     if (progressPercent >= 15 && progressPercent < 35) {
       displayText = part1;

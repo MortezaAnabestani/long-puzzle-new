@@ -33,7 +33,7 @@ export const WAVE_DURATION = 3000; // مدت زمان موج + فروریختن
 export const SLIDESHOW_DELAY = 300; // تاخیر قبل از شروع اسلایدشو
 export const SLIDE_DURATION = 1200; // مدت زمان هر اسلاید (افزایش داده شد برای دیدن بهتر)
 export const OUTRO_DURATION = 3000; // کارت پایانی
-export const TOTAL_SLIDES = 16; // تعداد اسلایدها
+export const TOTAL_SLIDES = 14; // تعداد اسلایدها (14 فصل)
 export const SLIDESHOW_DURATION = TOTAL_SLIDES * SLIDE_DURATION;
 
 // محاسبه زمان‌های کلیدی

@@ -121,15 +121,47 @@ const RecordingSystem: React.FC<RecordingSystemProps> = ({
   // Creating a second one (after disconnecting the first) breaks playback/recording from video 2 onwards.
   // The same source node continues to output the new audio when the element's src is updated.
 
+  // ✅ Start/stop recording based on isRecording state
+  // Also retry if canvas is not ready at first
   useEffect(() => {
-    if (isRecording) {
+    let retryTimeout: number | null = null;
+    let mounted = true;
+
+    const attemptStart = async () => {
+      if (!mounted || !isRecording) return;
+
+      const canvas = getCanvas();
+      if (!canvas) {
+        console.warn(`⚠️ [RecordingSystem] Canvas not ready, retrying in 500ms...`);
+        retryTimeout = window.setTimeout(() => {
+          if (mounted && isRecording) attemptStart();
+        }, 500);
+        return;
+      }
+
+      // Canvas is ready, start recording
       startRecording();
+    };
+
+    if (isRecording) {
+      attemptStart();
     } else {
       stopRecording();
     }
+
+    return () => {
+      mounted = false;
+      if (retryTimeout) clearTimeout(retryTimeout);
+    };
   }, [isRecording]);
 
   const startRecording = async () => {
+    // ✅ Prevent starting if already recording
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
+      console.log(`⚠️ [RecordingSystem] Already recording, skipping start`);
+      return;
+    }
+
     const canvas = getCanvas();
     const audioEl = audioRef.current;
     const useBuffer = !!musicBufferRef?.current;
