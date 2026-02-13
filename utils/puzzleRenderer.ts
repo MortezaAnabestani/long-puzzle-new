@@ -1,6 +1,6 @@
 import { Piece } from "../hooks/usePuzzleLogic";
 import { PieceShape, MovementType, PuzzleBackground } from "../types";
-import { getFinaleState, getDiagonalWaveY, OUTRO_DURATION } from "./finaleManager";
+import { getFinaleState, getDiagonalWaveY, OUTRO_DURATION, SLIDESHOW_END_TIME } from "./finaleManager";
 import { envEngine } from "./environmentRenderer";
 import { renderOutroCard } from "./outroRenderer";
 import { updateTrailHistory, renderTrailEffect } from "./trailEffects";
@@ -151,49 +151,62 @@ export const renderPuzzleFrame = ({
   const elapsedAfterFinish = Math.max(0, elapsed - totalDuration);
   const fState = getFinaleState(elapsedAfterFinish);
 
-  // ─── 🔥 SLIDESHOW PHASE ────────────────────────────────────────────
+  // ─── 🔥 SLIDESHOW PHASE (حرفه‌ای بدون شماره‌گذاری) ────────────────────────────────────────────
   if (fState.slideshowActive && completedPuzzleSnapshots && completedPuzzleSnapshots.length > 0) {
     const slideImage = completedPuzzleSnapshots[fState.currentSlide];
     if (slideImage) {
-      // Clear background
-      ctx.fillStyle = "#000000";
+      // پس‌زمینه gradient سینمایی
+      const bgGrad = ctx.createLinearGradient(0, 0, 0, vHeight);
+      bgGrad.addColorStop(0, "#000000");
+      bgGrad.addColorStop(0.5, "#050505");
+      bgGrad.addColorStop(1, "#000000");
+      ctx.fillStyle = bgGrad;
       ctx.fillRect(0, 0, vWidth, vHeight);
 
-      // Fade in/out transitions
-      const fadeIn = Math.min(fState.slideProgress * 4, 1); // Faster fade in
-      const fadeOut = fState.slideProgress > 0.75 ? 1 - (fState.slideProgress - 0.75) / 0.25 : 1;
+      // ترنزیشن‌های حرفه‌ای با Fade سریع
+      const fadeIn = Math.min(fState.slideProgress * 6, 1); // خیلی سریع (165ms)
+      const fadeOut = fState.slideProgress > 0.85 ? 1 - (fState.slideProgress - 0.85) / 0.15 : 1;
       const opacity = fadeIn * fadeOut;
 
       ctx.save();
       ctx.globalAlpha = opacity;
 
-      // Ken Burns effect (slow zoom and pan)
-      const scale = 1.0 + Math.sin(fState.slideProgress * Math.PI) * 0.08;
-      const panX = Math.sin(fState.slideProgress * Math.PI * 2) * 20;
-      const panY = Math.cos(fState.slideProgress * Math.PI * 2) * 20;
+      // ✨ Ken Burns Effect حرفه‌ای (مستندسازی سینمایی)
+      // این تکنیک در مستندهای Apple TV+، PBS و National Geographic استفاده می‌شود
+      const progress = fState.slideProgress;
+
+      // زوم آهسته و پیوسته (1.0 → 1.12) با easing طبیعی
+      const easeProgress = progress < 0.5 ? 2 * progress * progress : 1 - Math.pow(-2 * progress + 2, 2) / 2;
+      const scale = 1.0 + easeProgress * 0.12;
+
+      // Pan سینمایی با مسیر منحنی (نه خطی)
+      // حرکت در یک مسیر lemniscate (هشت افقی) برای حرکت طبیعی‌تر
+      const angle = progress * Math.PI * 2;
+      const panRadius = 25;
+      const panX = Math.sin(angle) * panRadius;
+      const panY = Math.sin(angle * 0.5) * (panRadius * 0.6); // حرکت عمودی کمتر
 
       ctx.translate(vWidth / 2 + panX, vHeight / 2 + panY);
       ctx.scale(scale, scale);
       ctx.translate(-vWidth / 2, -vHeight / 2);
 
-      // Draw slide
+      // رندر تصویر
       ctx.drawImage(slideImage, 0, 0, vWidth, vHeight);
 
-      // Slide progress indicator
-      ctx.globalAlpha = opacity * 0.7;
-      ctx.fillStyle = "#007acc";
-      ctx.font = "bold 90px Inter";
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-
-      // Animated slide number with glow
-      ctx.shadowColor = "#007acc";
-      ctx.shadowBlur = 30;
-      ctx.fillText(
-        `${fState.currentSlide + 1} / ${completedPuzzleSnapshots.length}`,
+      // Vignette ظریف برای look سینمایی
+      const vignette = ctx.createRadialGradient(
         vWidth / 2,
-        vHeight - 180,
+        vHeight / 2,
+        vHeight * 0.25,
+        vWidth / 2,
+        vHeight / 2,
+        vHeight * 0.65,
       );
+      vignette.addColorStop(0, "rgba(0, 0, 0, 0)");
+      vignette.addColorStop(0.7, "rgba(0, 0, 0, 0)");
+      vignette.addColorStop(1, "rgba(0, 0, 0, 0.4)");
+      ctx.fillStyle = vignette;
+      ctx.fillRect(-vWidth * 0.1, -vHeight * 0.1, vWidth * 1.2, vHeight * 1.2);
 
       ctx.restore();
       return 100; // slideshow active
@@ -201,12 +214,13 @@ export const renderPuzzleFrame = ({
   }
 
   // ─── 🔥 OUTRO CARD PHASE ───────────────────────────────────────────
-  if (fState.outroActive) {
+  if (fState.outroActive || elapsedAfterFinish >= SLIDESHOW_END_TIME) {
+    // ✅ Pass the actual elapsed time after finish for correct timing calculation
     renderOutroCard({
       ctx,
       vWidth,
       vHeight,
-      elapsedAfterFinish: fState.outroProgress * OUTRO_DURATION,
+      elapsedAfterFinish, // This is time since puzzle completion
       channelLogo,
     });
     return 100; // outro active
@@ -259,21 +273,15 @@ export const renderPuzzleFrame = ({
     }
   }
 
-  // ─── 2. RENDER COMPLETED PIECES (با موج در فاز نهایی) ──────────────
+  // ─── 2. RENDER COMPLETED PIECES (با موج بالا رونده در فاز نهایی) ──────────────
   for (const p of completedPieces) {
-    // 🌊 موج فقط در فاز wave active نمایش داده می‌شود
+    // 🌊 موج بالا رونده - قطعات به سمت بالا می‌روند و برمی‌گردند
     const waveY = fState.waveActive ? getDiagonalWaveY(p, elapsedAfterFinish, vWidth, vHeight) : 0;
-    const drawX = p.tx - (p.cachedCanvas!.width - p.pw) / 2;
-    const drawY = p.ty - (p.cachedCanvas!.height - p.ph) / 2 + waveY;
 
-    // 🔥 محو شدن تدریجی هنگام فروریختن
-    if (fState.waveActive && waveY > 100) {
-      const fadeOut = Math.max(0, 1 - waveY / vHeight);
-      ctx.globalAlpha = fadeOut;
-    }
+    const drawX = p.tx - (p.cachedCanvas!.width - p.pw) / 2;
+    const drawY = p.ty - (p.cachedCanvas!.height - p.ph) / 2 + waveY; // waveY منفی است = بالا می‌رود
 
     ctx.drawImage(p.cachedCanvas!, drawX, drawY);
-    ctx.globalAlpha = 1.0; // Reset alpha
   }
 
   // ─── 3. RENDER MOVING PIECES (🔥 OPTIMIZED WITH BATCHING) ─────────

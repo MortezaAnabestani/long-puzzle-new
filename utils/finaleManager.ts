@@ -1,14 +1,5 @@
 /**
- * 🎬 FINALE MANAGER V3 - با زمان‌بندی صحیح و تضمین پایان ویدئو
- *
- * ترتیب رویدادها در آخرین پازل:
- * 1. پازل تکمیل می‌شود
- * 2. پاز کوتاه (FINALE_PAUSE)
- * 3. موج پازل + فروریختن (WAVE_DURATION)
- * 4. پاز کوتاه قبل از اسلایدشو (SLIDESHOW_DELAY)
- * 5. اسلایدشو شروع می‌شود
- * 6. کارت پایانی
- * 7. پایان و شروع دانلود
+ * 🎬 FINALE MANAGER - مدیریت فاز نهایی پازل
  */
 
 import { Piece } from "../hooks/usePuzzleLogic";
@@ -27,11 +18,11 @@ export interface FinalePhaseState {
   zoomScale: number;
 }
 
-// ⏱️ تایمینگ‌ها
-export const FINALE_PAUSE = 800; // پاز اولیه بعد از تکمیل پازل
-export const WAVE_DURATION = 3000; // مدت زمان موج + فروریختن
-export const SLIDESHOW_DELAY = 300; // تاخیر قبل از شروع اسلایدشو
-export const SLIDE_DURATION = 1200; // مدت زمان هر اسلاید (افزایش داده شد برای دیدن بهتر)
+// ⏱️ تایمینگ‌های فاز نهایی
+export const FINALE_PAUSE = 1800; // پاز اولیه بعد از تکمیل پازل
+export const WAVE_DURATION = 3500; // مدت زمان موج (بالا رفتن و پایین آمدن)
+export const SLIDESHOW_DELAY = 800; // تاخیر قبل از شروع اسلایدشو
+export const SLIDE_DURATION = 1200; // مدت زمان هر اسلاید
 export const OUTRO_DURATION = 3000; // کارت پایانی
 export const TOTAL_SLIDES = 14; // تعداد اسلایدها (14 فصل)
 export const SLIDESHOW_DURATION = TOTAL_SLIDES * SLIDE_DURATION;
@@ -55,15 +46,15 @@ export const getFinaleState = (elapsedAfterFinish: number): FinalePhaseState => 
   // 🎬 فاز 1: پاز اولیه
   const pauseActive = t > 0 && t <= FINALE_PAUSE;
 
-  // 🌊 فاز 2: موج + فروریختن
-  const waveElapsed = Math.max(0, t - WAVE_START_TIME);
-  const waveProgress = Math.min(waveElapsed / WAVE_DURATION, 1);
-  const waveActive = t > WAVE_START_TIME && t < WAVE_END_TIME;
+  // 🌊 فاز 2: موج
+  const waveTime = Math.max(0, t - FINALE_PAUSE);
+  const waveProgress = Math.min(waveTime / WAVE_DURATION, 1);
+  const waveActive = waveTime > 0 && waveProgress < 1;
 
-  // زوم دوربین تدریجی
-  const zoomScale = 1 + t / 100000; // زوم بسیار آهسته
+  // زوم دوربین تدریجی (استاندارد جدید)
+  const zoomScale = 1 + t / 80000;
 
-  // 📺 فاز 3: اسلایدشو (بعد از اتمام موج)
+  // 📺 فاز 3: اسلایدشو
   const slideshowElapsed = Math.max(0, t - SLIDESHOW_START_TIME);
   const slideshowActive = t >= SLIDESHOW_START_TIME && t < SLIDESHOW_END_TIME;
   const currentSlide = Math.min(Math.floor(slideshowElapsed / SLIDE_DURATION), TOTAL_SLIDES - 1);
@@ -93,38 +84,39 @@ export const getFinaleState = (elapsedAfterFinish: number): FinalePhaseState => 
 };
 
 /**
- * محاسبه Y موج مورب برای هر قطعه
+ * محاسبه Y موج مورب - موج به سمت بالا می‌رود (منفی)
+ * این موج قطعات را به سمت بالا می‌برد و سپس به حالت اولیه بر می‌گرداند
  */
 export const getDiagonalWaveY = (p: Piece, t: number, vWidth: number, vHeight: number): number => {
-  if (t < WAVE_START_TIME) return 0;
+  if (t <= FINALE_PAUSE) return 0;
 
-  const waveElapsed = t - WAVE_START_TIME;
-  const waveT = Math.min(waveElapsed / WAVE_DURATION, 1);
+  const elapsed = t - FINALE_PAUSE;
+  const individualDuration = 1400; // مدت زمان موج برای هر قطعه
 
-  // موج مورب از بالا چپ به پایین راست
-  const diagonalPos = (p.tx + p.ty) / (vWidth + vHeight);
-  const waveDelay = diagonalPos * 0.5; // تاخیر بر اساس موقعیت مورب
+  // محاسبه فاصله مورب (از بالا چپ به پایین راست)
+  const diagDist = (p.tx + p.ty) / (vWidth + vHeight);
 
-  const localT = Math.max(0, Math.min((waveT - waveDelay) / 0.5, 1));
+  // تاخیر شروع موج برای این قطعه
+  const pieceStartDelay = diagDist * (WAVE_DURATION - individualDuration);
+  const pieceElapsed = elapsed - pieceStartDelay;
 
-  // محاسبه ارتفاع موج
-  const amplitude = 30; // ارتفاع موج
-  const frequency = 4; // تعداد موج‌ها
-  const waveY = Math.sin(localT * Math.PI * frequency) * amplitude * (1 - localT);
+  // اگر موج به این قطعه رسیده است
+  if (pieceElapsed > 0 && pieceElapsed < individualDuration) {
+    // استفاده از sine برای حرکت نرم بالا و پایین
+    const ease = Math.sin((pieceElapsed / individualDuration) * Math.PI);
+    return -ease * 65; // منفی = بالا رفتن، 65 پیکسل دامنه
+  }
 
-  // فروریختن تدریجی بعد از موج
-  const fallY = localT * vHeight * 1.5;
-
-  return waveY + fallY;
+  return 0;
 };
 
 /**
  * لاگ تایمینگ برای دیباگ
  */
 export const logFinaleTimeline = () => {
-  console.log("📅 [Finale Timeline V3]");
+  console.log("📅 [Finale Timeline]");
   console.log(`  0ms - ${FINALE_PAUSE}ms: Initial pause`);
-  console.log(`  ${WAVE_START_TIME}ms - ${WAVE_END_TIME}ms: Wave + Collapse`);
+  console.log(`  ${WAVE_START_TIME}ms - ${WAVE_END_TIME}ms: Wave (upward motion)`);
   console.log(`  ${WAVE_END_TIME}ms - ${SLIDESHOW_START_TIME}ms: Pre-slideshow delay`);
   console.log(`  ${SLIDESHOW_START_TIME}ms - ${SLIDESHOW_END_TIME}ms: Slideshow (${TOTAL_SLIDES} slides)`);
   console.log(`  ${OUTRO_START_TIME}ms - ${OUTRO_END_TIME}ms: Outro card`);

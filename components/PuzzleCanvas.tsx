@@ -343,7 +343,7 @@ const PuzzleCanvas = forwardRef<CanvasHandle, PuzzleCanvasProps>(
           onFinished();
         }
 
-        // ✅ Last chapter finale - Simple wave + collapse + slideshow + outro
+        // ✅ Last chapter finale - Wave collapse ONLY (no physics explosion)
         if (isLastChapter) {
           const afterFinish = Math.max(0, elapsed - totalDuration);
 
@@ -353,38 +353,35 @@ const PuzzleCanvas = forwardRef<CanvasHandle, PuzzleCanvasProps>(
             logFinaleTimeline();
           }
 
-          // ✅ WAVE: starts after FINALE_PAUSE
+          // ✅ WAVE SOUND: starts after FINALE_PAUSE
           if (afterFinish > FINALE_PAUSE && !wavePlayedRef.current) {
             sonicEngine.play("WAVE", 2.5);
             wavePlayedRef.current = true;
             console.log(`🌊 [Canvas] Wave sound triggered at ${afterFinish.toFixed(0)}ms`);
           }
 
-          // ✅ PHYSICS COLLAPSE: triggered after wave completes + delay
-          const explosionTriggerTime = FINALE_PAUSE + WAVE_DURATION + 1500;
-          if (afterFinish >= explosionTriggerTime && !physicsActivatedRef.current) {
-            physicsActivatedRef.current = true;
-            activatePhysics();
-            console.log(`💥 [Canvas] Physics activated for collapse at ${afterFinish.toFixed(0)}ms`);
-          }
+          // ❌ NO PHYSICS - The wave collapse is handled purely in renderer via getDiagonalWaveY
+          // This prevents the "pieces collecting from corner" bug that happens with physics
 
-          // Continue rendering - slideshow & outro handled in renderer
+          // Continue rendering - wave, slideshow & outro handled in renderer
         }
 
-        // Physics update
+        // Physics update (NOT USED in last chapter - using pure wave collapse instead)
         let physicsPieces = new Map();
         const Matter = getMatter();
 
-        if (isPhysicsActiveRef.current && engineRef.current && Matter) {
-          Matter.Engine.update(engineRef.current, 16.666);
-          bodiesRef.current.forEach((body: any, id: number) => {
-            physicsPieces.set(id, {
-              x: body.position.x,
-              y: body.position.y,
-              angle: body.angle,
-            });
-          });
-        }
+        // ❌ DISABLED: Physics causes "corner collection" bug
+        // Using pure getDiagonalWaveY() collapse animation instead
+        // if (isPhysicsActiveRef.current && engineRef.current && Matter) {
+        //   Matter.Engine.update(engineRef.current, 16.666);
+        //   bodiesRef.current.forEach((body: any, id: number) => {
+        //     physicsPieces.set(id, {
+        //       x: body.position.x,
+        //       y: body.position.y,
+        //       angle: body.angle,
+        //     });
+        //   });
+        // }
 
         // Transition progress
         let transProgress = 0;

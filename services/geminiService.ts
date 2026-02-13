@@ -44,7 +44,7 @@ export const generateCoherentContentPackage = async (category: string, categoryL
   const selectedMood = musicMoods[Math.floor(Math.random() * musicMoods.length)];
 
   console.log(
-    `Generating coherent package: ${categoryLabel} with ${selectedLens} lens and ${selectedMood} mood`
+    `Generating coherent package: ${categoryLabel} with ${selectedLens} lens and ${selectedMood} mood`,
   );
 
   const { generateCoherentStoryArc } = await import("./ai/storyArc");
@@ -78,7 +78,7 @@ export const generateEnhancedMetadata = async (
   topic: string,
   storyArc: StoryArc,
   narrativeLens: NarrativeLens,
-  category: string
+  category: string,
 ) => {
   const ai = getAIInstance();
 
@@ -106,21 +106,55 @@ export const generateEnhancedMetadata = async (
         * "Hidden Truth About [X]"
         * "[X] vs [Y]: The Shocking Reality"
 
-      DESCRIPTION STRATEGY (Enhanced for SEO):
-      - Length: 300-500 words (YouTube prefers detailed descriptions)
-      - Structure:
-        1. Opening Hook (2-3 sentences): Expand on title's promise
-        2. Content Preview (3-4 sentences): Tease the journey WITHOUT spoilers
-        3. Timeline Markers (CRITICAL for engagement):
-           0:00 - Introduction
-           0:15 - [Chapter 1 title]
-           0:45 - [Chapter 2 title]
-           ... (all chapter timestamps)
-        4. Conclusion (1-2 sentences): Call to action (like, subscribe, comment)
-        5. Relevant hashtags (2-3 at the very end)
-      - SEO Keywords: Naturally integrate topic-related keywords
-      - Engagement: Ask a question to encourage comments
-      - NO spoilers but create anticipation
+      DESCRIPTION STRATEGY (Enhanced for SEO & Engagement):
+      - Length: 400-600 words (YouTube rewards detailed, structured descriptions)
+      - CRITICAL: Must include complete video scenario without spoilers
+      
+      Structure (MANDATORY ORDER):
+      1. HOOK (3-4 sentences): 
+         - Start with the main mystery/question
+         - Create intrigue about what viewers will discover
+         - Promise a journey without revealing the answer
+      
+      2. VIDEO SCENARIO (4-5 sentences):
+         - Describe the puzzle reveal format: "Watch as a mysterious image slowly comes together, piece by piece..."
+         - Explain the narrative structure: "Each piece reveals a new clue about [topic]..."
+         - Mention the visual journey: "Through stunning visuals and carefully crafted storytelling..."
+         - Build anticipation: "As the final pieces fall into place, the truth becomes clear..."
+         - NO spoilers but paint a picture of the experience
+      
+      3. CHAPTER TIMELINE (CRITICAL - Boosts watch time):
+         📍 TIMESTAMPS:
+         0:00 - The Mystery Begins
+         0:15 - First Clues Emerge
+         0:30 - The Plot Thickens
+         0:45 - Unexpected Revelations
+         1:00 - Pieces Fall Into Place
+         1:15 - The Big Reveal
+         1:30 - Final Thoughts
+         
+         (Adjust chapter titles to match the actual story arc provided)
+      
+      4. ENGAGEMENT QUESTION (1-2 sentences):
+         - Ask viewers what they think
+         - Encourage comments: "What surprised you most? Let us know in the comments!"
+      
+      5. CALL TO ACTION (1-2 sentences):
+         - "If this blew your mind, smash that like button!"
+         - "Subscribe for more mind-bending reveals!"
+      
+      6. HASHTAGS (Last line):
+         - 3-4 relevant hashtags separated by spaces
+      
+      SEO KEYWORDS INTEGRATION:
+      - Naturally weave topic keywords throughout (minimum 5-7 instances)
+      - Include related search terms people might use
+      - Add synonyms and variations
+      
+      TONE:
+      - Exciting but not over-the-top
+      - Professional yet accessible
+      - Create FOMO (fear of missing out) without being clickbaity
 
       TAGS STRATEGY:
       - Mix broad terms (3-4) with specific niche terms (4-5)
