@@ -6,6 +6,7 @@ import {
   FINALE_PAUSE,
   WAVE_DURATION,
   TOTAL_FINALE_DURATION,
+  COLLAPSE_START_TIME,
   logFinaleTimeline,
 } from "../utils/finaleManager";
 import { sonicEngine } from "../services/proceduralAudio";
@@ -153,41 +154,46 @@ const PuzzleCanvas = forwardRef<CanvasHandle, PuzzleCanvasProps>(
 
       isPhysicsActiveRef.current = true;
 
+      // 💥 Play explosion sound for dramatic effect
       if (!destructionPlayedRef.current) {
-        sonicEngine.play("DESTRUCT", 1.0);
+        sonicEngine.play("DESTRUCT", 1.5); // Louder for explosion
         destructionPlayedRef.current = true;
       }
 
-      // ✅ Use ALL pieces for realistic collapse (not just 70%)
+      // ✅ Use ALL pieces for realistic collapse
       const allPieces = piecesRef.current;
 
       const bodies: any[] = [];
       allPieces.forEach((p) => {
         // Create physics body for each piece
         const body = Matter.Bodies.rectangle(p.tx + p.pw / 2, p.ty + p.ph / 2, p.pw, p.ph, {
-          restitution: 0.6, // Bounciness
-          friction: 0.1,
-          angle: (Math.random() - 0.5) * 0.5, // Random initial rotation
+          restitution: 0.4, // Less bouncy for more realistic collapse
+          friction: 0.3, // More friction to settle on ground
+          density: 0.001, // Light pieces
+          angle: (Math.random() - 0.5) * 0.8, // More random rotation
         });
 
-        // Apply outward explosive force from center
+        // 💥 EXPLOSION: Strong outward force from center
         const dx = p.tx + p.pw / 2 - vWidth / 2;
         const dy = p.ty + p.ph / 2 - vHeight / 2;
         const dist = Math.sqrt(dx * dx + dy * dy) || 1;
 
-        // Stronger outward force for more dramatic collapse
+        // Much stronger explosion force with more variation
+        const explosionStrength = 0.35 + Math.random() * 0.25; // 0.35-0.6
         Matter.Body.applyForce(body, body.position, {
-          x: (dx / dist) * 0.22 * (0.8 + Math.random() * 0.4), // Varied strength
-          y: (dy / dist) * 0.22 * (0.8 + Math.random() * 0.4) - 0.12, // With upward component
+          x: (dx / dist) * explosionStrength,
+          y: (dy / dist) * explosionStrength - 0.15, // Slight upward for dramatic effect
         });
+
+        // Add angular velocity for spinning during fall
+        Matter.Body.setAngularVelocity(body, (Math.random() - 0.5) * 0.3);
 
         bodies.push(body);
         bodiesRef.current.set(p.id, body);
       });
 
       Matter.World.add(engineRef.current.world, bodies);
-      // ✅ Keep all pieces (don't reduce piecesRef)
-      // piecesRef.current stays the same
+      console.log(`💥 [Physics] ${bodies.length} pieces exploding and collapsing to ground`);
     }, [piecesRef, getMatter, vWidth, vHeight]);
 
     // ─── CLEANUP ────────────────────────────────────────────────────
@@ -343,7 +349,7 @@ const PuzzleCanvas = forwardRef<CanvasHandle, PuzzleCanvasProps>(
           onFinished();
         }
 
-        // ✅ Last chapter finale - Wave collapse ONLY (no physics explosion)
+        // ✅ Last chapter finale - Simple wave + collapse + slideshow + outro
         if (isLastChapter) {
           const afterFinish = Math.max(0, elapsed - totalDuration);
 
@@ -353,35 +359,38 @@ const PuzzleCanvas = forwardRef<CanvasHandle, PuzzleCanvasProps>(
             logFinaleTimeline();
           }
 
-          // ✅ WAVE SOUND: starts after FINALE_PAUSE
+          // ✅ WAVE: starts after FINALE_PAUSE
           if (afterFinish > FINALE_PAUSE && !wavePlayedRef.current) {
             sonicEngine.play("WAVE", 2.5);
             wavePlayedRef.current = true;
             console.log(`🌊 [Canvas] Wave sound triggered at ${afterFinish.toFixed(0)}ms`);
           }
 
-          // ❌ NO PHYSICS - The wave collapse is handled purely in renderer via getDiagonalWaveY
-          // This prevents the "pieces collecting from corner" bug that happens with physics
+          // 💥 PHYSICS COLLAPSE: starts after wave ends
+          if (afterFinish >= COLLAPSE_START_TIME && !physicsActivatedRef.current) {
+            physicsActivatedRef.current = true;
+            activatePhysics();
+            sonicEngine.play("DESTRUCT", 1.5);
+            console.log(`💥 [Canvas] Physics collapse activated at ${afterFinish.toFixed(0)}ms`);
+          }
 
-          // Continue rendering - wave, slideshow & outro handled in renderer
+          // Continue rendering - slideshow & outro handled in renderer
         }
 
-        // Physics update (NOT USED in last chapter - using pure wave collapse instead)
+        // Physics update
         let physicsPieces = new Map();
         const Matter = getMatter();
 
-        // ❌ DISABLED: Physics causes "corner collection" bug
-        // Using pure getDiagonalWaveY() collapse animation instead
-        // if (isPhysicsActiveRef.current && engineRef.current && Matter) {
-        //   Matter.Engine.update(engineRef.current, 16.666);
-        //   bodiesRef.current.forEach((body: any, id: number) => {
-        //     physicsPieces.set(id, {
-        //       x: body.position.x,
-        //       y: body.position.y,
-        //       angle: body.angle,
-        //     });
-        //   });
-        // }
+        if (isPhysicsActiveRef.current && engineRef.current && Matter) {
+          Matter.Engine.update(engineRef.current, 16.666);
+          bodiesRef.current.forEach((body: any, id: number) => {
+            physicsPieces.set(id, {
+              x: body.position.x,
+              y: body.position.y,
+              angle: body.angle,
+            });
+          });
+        }
 
         // Transition progress
         let transProgress = 0;

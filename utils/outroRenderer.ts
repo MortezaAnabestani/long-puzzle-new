@@ -132,16 +132,9 @@ const drawIcon = (
 
 export const renderOutroCard = ({ ctx, vWidth, vHeight, elapsedAfterFinish, channelLogo }: OutroOptions) => {
   const OUTRO_START = SLIDESHOW_END_TIME; // Start outro after slideshow ends
+  if (elapsedAfterFinish < OUTRO_START) return;
 
-  // CRITICAL: elapsedAfterFinish is the time AFTER puzzle completion
-  // We need to check if we're past the slideshow end time
-  if (elapsedAfterFinish < OUTRO_START) {
-    return; // Not yet time for outro
-  }
-
-  // Calculate outro progress (0 to 1)
-  const outroElapsed = elapsedAfterFinish - OUTRO_START;
-  const t = Math.min(1, outroElapsed / 1500); // Smooth 1.5s fade-in
+  const t = Math.min(1, (elapsedAfterFinish - OUTRO_START) / 800);
 
   // MOVED UP: Shift center Y up by 80px for better visual balance
   const centerX = vWidth / 2;
