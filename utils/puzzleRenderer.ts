@@ -180,8 +180,123 @@ export const renderPuzzleFrame = ({
       vHeight,
       elapsedAfterFinish, // Pass actual time, not progress
       channelLogo,
+      position: "center", // ✅ Center position for finale
     });
     return 100; // outro active
+  }
+
+  // ─── ✅ MID-VIDEO OUTRO CTAs (2.5min and 5min) ────────────────────
+  // Show outro card at specific timestamps during normal playback
+  const elapsedSeconds = elapsed / 1000;
+  const CTA_DURATION = 3; // 3 seconds duration for each CTA
+
+  // 2.5 minute mark (150 seconds): Show for 3 seconds
+  const isMidCTA1 = elapsedSeconds >= 150 && elapsedSeconds < 150 + CTA_DURATION;
+
+  // 5 minute mark (300 seconds): Show for 3 seconds
+  const isMidCTA2 = elapsedSeconds >= 300 && elapsedSeconds < 300 + CTA_DURATION;
+
+  if (isMidCTA1 || isMidCTA2) {
+    // First render the normal puzzle background
+    if (!physicsPieces) {
+      envEngine.render(ctx, img, elapsed, vWidth, vHeight);
+    } else {
+      ctx.fillStyle = "#050505";
+      ctx.fillRect(0, 0, vWidth, vHeight);
+    }
+
+    ctx.save();
+    if (fState.isFinale) {
+      ctx.translate(vWidth / 2, vHeight / 2);
+      ctx.scale(fState.zoomScale, fState.zoomScale);
+      ctx.translate(-vWidth / 2, -vHeight / 2);
+    }
+
+    // Ghost preview
+    ctx.globalAlpha = 0.015;
+    ctx.drawImage(img, 0, 0, vWidth, vHeight);
+    ctx.globalAlpha = 1.0;
+
+    // Render pieces normally (continued below after this CTA check)
+    const sorted = getSortedPieces(pieces);
+    const completedPieces: Piece[] = [];
+    const movingPieces: Piece[] = [];
+
+    for (const p of sorted) {
+      if (physicsPieces?.has(p.id)) {
+        movingPieces.push(p);
+        continue;
+      }
+
+      const delay = (p.assemblyOrder / totalPieces) * (totalDuration - 2700);
+      const tRaw = Math.max(0, Math.min((elapsed - delay) / 2700, 1));
+      (p as any).tRaw = tRaw;
+
+      if (tRaw >= 0.9999) {
+        completedPieces.push(p);
+      } else if (tRaw > 0) {
+        movingPieces.push(p);
+      }
+    }
+
+    // Render completed pieces
+    for (const p of completedPieces) {
+      const drawX = p.tx - (p.cachedCanvas!.width - p.pw) / 2;
+      const drawY = p.ty - (p.cachedCanvas!.height - p.ph) / 2;
+      ctx.drawImage(p.cachedCanvas!, drawX, drawY);
+    }
+
+    // Render moving pieces
+    const piecesToRender =
+      movingPieces.length > renderBatchSize ? movingPieces.slice(0, renderBatchSize) : movingPieces;
+
+    for (const p of piecesToRender) {
+      const physicsData = physicsPieces?.get(p.id);
+
+      if (physicsData) {
+        ctx.save();
+        ctx.translate(physicsData.x, physicsData.y);
+        ctx.rotate(physicsData.angle);
+        ctx.drawImage(p.cachedCanvas!, -p.cachedCanvas!.width / 2, -p.cachedCanvas!.height / 2);
+        ctx.restore();
+        continue;
+      }
+
+      const tRaw = (p as any).tRaw;
+      const pos = calculateKineticTransform(p, tRaw, movement, vWidth, vHeight);
+
+      if (tRaw >= 0.1 && tRaw <= 0.85 && p.id % 3 === 0) {
+        updateTrailHistory(p, pos.x, pos.y, pos.rot, pos.scale, elapsed, movement, tRaw);
+        renderTrailEffect(ctx, p, movement);
+      }
+
+      ctx.save();
+      ctx.translate(pos.x, pos.y);
+      ctx.rotate(pos.rot);
+      ctx.scale(pos.scale, pos.scale);
+
+      if (!fState.isFinale) {
+        ctx.shadowColor = "rgba(0,0,0,0.6)";
+        ctx.shadowBlur = 15;
+      }
+
+      ctx.drawImage(p.cachedCanvas!, -p.cachedCanvas!.width / 2, -p.cachedCanvas!.height / 2);
+      ctx.restore();
+    }
+
+    ctx.restore();
+
+    // ✅ NOW render the CTA on top with semi-transparent background
+    renderOutroCard({
+      ctx,
+      vWidth,
+      vHeight,
+      elapsedAfterFinish: 0, // Not used for top position
+      channelLogo,
+      position: "top", // ✅ Top position for mid-video CTAs
+    });
+
+    return (completedPieces.length / totalPieces) * 100;
   }
 
   // ─── 1. ENVIRONMENT ───────────────────────────────────────────────

@@ -8,6 +8,7 @@ interface CanvasAreaProps {
   imageUrl: string | null;
   durationMinutes: number;
   isColoring: boolean;
+  isPaused: boolean; // ✅ NEW: for 1.5s pause after puzzle completion
   pieceCount: number;
   shape: PieceShape;
   material: PieceMaterial;
@@ -34,6 +35,7 @@ const CanvasArea: React.FC<CanvasAreaProps> = ({
   imageUrl,
   durationMinutes,
   isColoring,
+  isPaused,
   pieceCount,
   shape,
   material,
@@ -118,6 +120,7 @@ const CanvasArea: React.FC<CanvasAreaProps> = ({
                 channelLogoUrl={channelLogoUrl}
                 onProgress={onProgress}
                 isSolving={isColoring}
+                isPaused={isPaused}
                 onFinished={onFinished}
                 onFinaleComplete={onFinaleComplete}
                 onTransitionComplete={onTransitionComplete}

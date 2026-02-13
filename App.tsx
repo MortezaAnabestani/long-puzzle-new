@@ -61,6 +61,10 @@ const AppContent: React.FC = () => {
   // ─── CHAPTER INFO OVERLAY ───────────────────────────────────────────
   const [showChapterInfo, setShowChapterInfo] = useState(false);
 
+  // ✅ State for 1.5s pause after puzzle completion
+  const [isPaused, setIsPaused] = useState(false);
+  const pauseTimeoutRef = useRef<number | null>(null);
+
   // ─── CTA GLOBAL TIMING ──────────────────────────────────────────────
   const [globalElapsedTime, setGlobalElapsedTime] = useState(0);
   const [showMidCTA, setShowMidCTA] = useState(false);
@@ -165,6 +169,56 @@ const AppContent: React.FC = () => {
     }
   }, [channelLogoUrl]);
 
+  // ─── ✅ AUTO-START RECORDING WHEN PROJECT IS READY ─────────────────
+  // این برای حل مشکل ضبط ناقص - باید ضبط از همان ابتدا شروع شود
+  const autoStartTriggeredRef = useRef(false); // ✅ Prevent multiple triggers
+
+  useEffect(() => {
+    // ✅ فقط یک بار trigger شود
+    if (autoStartTriggeredRef.current) return;
+
+    if (
+      state.project &&
+      state.project.status === ProjectStatus.READY_TO_PLAY &&
+      !state.isSolving &&
+      !state.isRecording
+    ) {
+      autoStartTriggeredRef.current = true; // ✅ Mark as triggered
+      console.log(`🎬 [App] Project ready - AUTO-STARTING recording and playback...`);
+
+      // ✅ Start after a small delay to ensure canvas is ready
+      setTimeout(() => {
+        setState((s) => {
+          if (!s.project) return s;
+
+          // Start audio with fade
+          if (audioRef.current) {
+            audioRef.current.currentTime = 0;
+            playWithFade(audioRef.current, { duration: 2000, targetVolume: 1.0 });
+          }
+
+          console.log(`   🎥 Setting isRecording = true`);
+          console.log(`   ▶️ Setting isSolving = true`);
+
+          return {
+            ...s,
+            isSolving: true,
+            isRecording: true, // ✅ شروع ضبط از همان ابتدا
+            progress: 0,
+            pipelineStep: "RECORDING",
+            project: {
+              ...s.project,
+              status: ProjectStatus.PLAYING,
+              chapters: s.project.chapters.map((ch, i) =>
+                i === 0 ? { ...ch, status: ChapterStatus.PLAYING } : ch,
+              ),
+            },
+          };
+        });
+      }, 500); // ✅ 500ms delay to ensure canvas is ready
+    }
+  }, [state.project?.status]); // ✅ فقط وقتی status تغییر کند
+
   // ─── ✅ TRANSITION COMPLETE (کلید اصلی!) ──────────────────────────
   const handleTransitionComplete = useCallback(() => {
     console.log(`🎬 [App] handleTransitionComplete called`);
@@ -242,71 +296,72 @@ const AppContent: React.FC = () => {
   }, [setState]);
 
   // ─── ✅ PUZZLE FINISHED - WITH PROPER SNAPSHOT HANDLING ───────────
+  // ─── ✅ PUZZLE FINISHED - WITH PROPER 1.5s PAUSE ──────────────────
   const handlePuzzleFinished = useCallback(() => {
     console.log(`🏁 [App] handlePuzzleFinished - chapter ${state.currentChapterIndex + 1}`);
 
-    setState((s) => {
-      if (!s.project) return s;
+    // ✅ Clean up any existing pause timeout
+    if (pauseTimeoutRef.current) {
+      clearTimeout(pauseTimeoutRef.current);
+      pauseTimeoutRef.current = null;
+    }
 
-      const nextIndex = s.currentChapterIndex + 1;
-      const isCurrentlyLastChapter = s.currentChapterIndex === s.project.chapters.length - 1;
+    const currentIdx = state.currentChapterIndex;
+    const isLastChapter = state.project ? currentIdx === state.project.chapters.length - 1 : false;
 
-      // 📸 CRITICAL: Snapshot باید قبل از هر عملیات دیگری گرفته شود
-      // از setTimeout استفاده می‌کنیم تا اطمینان حاصل کنیم canvas آماده است
-      setTimeout(() => {
-        if (canvasHandleRef.current) {
-          const canvas = canvasHandleRef.current.getCanvas();
-          if (canvas) {
-            try {
-              const snapshot = new Image();
-              snapshot.src = canvas.toDataURL("image/png");
-              snapshot.onload = () => {
-                completedPuzzleSnapshots.current.push(snapshot);
-                console.log(
-                  `📸 Snapshot ${completedPuzzleSnapshots.current.length}/${s.project?.chapters.length} saved for chapter ${s.currentChapterIndex + 1}`,
-                );
-
-                // 🎬 اگر فصل آخر است، لاگ اسلایدشو
-                if (isCurrentlyLastChapter) {
-                  console.log(
-                    `🎬 [App] All ${completedPuzzleSnapshots.current.length} snapshots ready for slideshow`,
-                  );
-                }
-              };
-              snapshot.onerror = () => {
-                console.error(`❌ [App] Failed to load snapshot for chapter ${s.currentChapterIndex + 1}`);
-              };
-            } catch (err) {
-              console.error(`❌ [App] Error capturing snapshot:`, err);
-            }
-          } else {
-            console.warn(`⚠️ [App] Canvas not available for snapshot`);
+    // 📸 Take snapshot first
+    setTimeout(() => {
+      if (canvasHandleRef.current) {
+        const canvas = canvasHandleRef.current.getCanvas();
+        if (canvas) {
+          try {
+            const snapshot = new Image();
+            snapshot.src = canvas.toDataURL("image/png");
+            snapshot.onload = () => {
+              completedPuzzleSnapshots.current.push(snapshot);
+              console.log(
+                `📸 Snapshot ${completedPuzzleSnapshots.current.length}/${state.project?.chapters.length} saved for chapter ${currentIdx + 1}`,
+              );
+            };
+          } catch (err) {
+            console.error(`❌ [App] Error capturing snapshot:`, err);
           }
         }
-      }, 100); // کمی صبر می‌کنیم تا render نهایی انجام شود
-
-      // ✅ FIX: اگر الان آخرین فصل است
-      if (isCurrentlyLastChapter) {
-        console.log(
-          `🏁 [App] Last chapter (${s.currentChapterIndex + 1}) finished - finale sequence will continue`,
-        );
-        // در فصل آخر، فقط وضعیت را نگه می‌داریم
-        // PuzzleCanvas خودش مراحل finale را مدیریت می‌کند و سپس handleFinaleComplete را صدا می‌زند
-        return s;
       }
+    }, 100);
 
-      // ✅ اگر هنوز فصل دیگری باقی مانده
-      if (nextIndex < s.project.chapters.length) {
-        console.log(`🎬 [App] Starting transition to chapter ${nextIndex + 1}`);
+    // ✅ For last chapter: just return, finale will handle itself
+    if (isLastChapter) {
+      console.log(`🏁 [App] Last chapter finished - finale sequence will continue`);
+      return;
+    }
+
+    // ✅ For non-last chapters: PAUSE for 1.5 seconds, then transition
+    console.log(`⏸️ [App] Starting 1.5 second pause on completed puzzle...`);
+
+    // Set pause state immediately
+    setIsPaused(true);
+
+    // After 1.5 seconds, start transition
+    pauseTimeoutRef.current = window.setTimeout(() => {
+      console.log(`🎬 [App] 1.5s pause complete - starting transition to chapter ${currentIdx + 2}`);
+
+      setIsPaused(false);
+
+      setState((s) => {
+        if (!s.project) return s;
+
+        // Show chapter info overlay
+        setShowChapterInfo(true);
+        setTimeout(() => setShowChapterInfo(false), 2000);
+
         return {
           ...s,
           isTransitioning: true,
         };
-      }
-
-      return s;
-    });
-  }, [setState, state.project, state.currentChapterIndex]);
+      });
+    }, 1500);
+  }, [state.currentChapterIndex, state.project, setState]);
 
   // ─── START/PAUSE ────────────────────────────────────────────────────
   const handleToggleSolve = useCallback(() => {
@@ -478,6 +533,7 @@ const AppContent: React.FC = () => {
             imageUrl={currentImageUrl}
             durationMinutes={currentChapter ? currentChapter.durationSeconds / 60 : 0.75}
             isColoring={state.isSolving}
+            isPaused={isPaused}
             pieceCount={currentChapter?.puzzleConfig.pieceCount ?? preferences.defaultPieceCount}
             shape={currentChapter?.puzzleConfig.shape ?? preferences.defaultShape}
             material={currentChapter?.puzzleConfig.material ?? preferences.defaultMaterial}

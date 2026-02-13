@@ -11,6 +11,7 @@ export interface OutroOptions {
   vHeight: number;
   elapsedAfterFinish: number;
   channelLogo?: HTMLImageElement;
+  position?: "top" | "center"; // ✅ NEW: position for mid-video vs finale
 }
 
 // Helper: Draw a rounded rectangle path
@@ -130,29 +131,50 @@ const drawIcon = (
   ctx.restore();
 };
 
-export const renderOutroCard = ({ ctx, vWidth, vHeight, elapsedAfterFinish, channelLogo }: OutroOptions) => {
+export const renderOutroCard = ({
+  ctx,
+  vWidth,
+  vHeight,
+  elapsedAfterFinish,
+  channelLogo,
+  position = "center",
+}: OutroOptions) => {
   const OUTRO_START = SLIDESHOW_END_TIME; // Start outro after slideshow ends
-  if (elapsedAfterFinish < OUTRO_START) return;
+
+  // ✅ For finale outro (center position), check timing as before
+  if (position === "center" && elapsedAfterFinish < OUTRO_START) return;
 
   const t = Math.min(1, (elapsedAfterFinish - OUTRO_START) / 800);
 
-  // MOVED UP: Shift center Y up by 80px for better visual balance
+  // ✅ POSITION CALCULATION
   const centerX = vWidth / 2;
-  const centerY = vHeight / 2 - 80;
+  let centerY: number;
+
+  if (position === "top") {
+    // ✅ TOP POSITION: For mid-video CTAs at 2.5min and 5min
+    centerY = 350; // Higher up on screen with some padding from top
+  } else {
+    // ✅ CENTER POSITION: For finale outro (default)
+    centerY = vHeight / 2 - 80; // Original center position
+  }
 
   const PRIMARY_COLOR = "#007acc";
   const SURFACE_BG = "rgba(10, 10, 12, 0.85)";
 
   ctx.save();
-  ctx.globalAlpha = t;
+
+  // ✅ For mid-video CTAs, use full opacity immediately (no fade in needed)
+  ctx.globalAlpha = position === "top" ? 1 : t;
 
   // 1. BACKDROP
-  ctx.fillStyle = SURFACE_BG;
+  // ✅ For top position (mid-video), use semi-transparent backdrop
+  // For center position (finale), use darker backdrop
+  ctx.fillStyle = position === "top" ? "rgba(10, 10, 12, 0.40)" : SURFACE_BG;
   ctx.fillRect(0, 0, vWidth, vHeight);
 
   // 2. AMBIENT GLOW
   ctx.save();
-  ctx.globalAlpha = t * 0.6;
+  ctx.globalAlpha = (position === "top" ? 1 : t) * 0.6;
   const glowGrad = ctx.createRadialGradient(centerX, centerY - 50, 0, centerX, centerY, 600);
   glowGrad.addColorStop(0, "rgba(0, 122, 204, 0.25)");
   glowGrad.addColorStop(1, "rgba(0, 0, 0, 0)");

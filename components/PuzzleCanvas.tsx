@@ -28,6 +28,7 @@ interface PuzzleCanvasProps {
   channelLogoUrl: string | null;
   onProgress: (p: number) => void;
   isSolving: boolean;
+  isPaused: boolean; // ✅ NEW: for 1.5s pause after completion
   onFinished: () => void;
   onFinaleComplete: () => void; // ✅ NEW: callback بعد از اتمام کامل finale
   onTransitionComplete: () => void;
@@ -60,6 +61,7 @@ const PuzzleCanvas = forwardRef<CanvasHandle, PuzzleCanvasProps>(
       channelLogoUrl,
       onProgress,
       isSolving,
+      isPaused,
       onFinished,
       onFinaleComplete,
       onTransitionComplete,
@@ -82,6 +84,7 @@ const PuzzleCanvas = forwardRef<CanvasHandle, PuzzleCanvasProps>(
     const { piecesRef, imageRef, createPieces } = usePuzzleLogic();
     const animationRef = useRef<number>(0);
     const startTimeRef = useRef<number | null>(null);
+    const lastElapsedRef = useRef<number>(0); // ✅ Track elapsed time for pause/resume
 
     // Transition
     const transitionCleanupRef = useRef<(() => void) | null>(null);
@@ -167,26 +170,26 @@ const PuzzleCanvas = forwardRef<CanvasHandle, PuzzleCanvasProps>(
       allPieces.forEach((p) => {
         // Create physics body for each piece
         const body = Matter.Bodies.rectangle(p.tx + p.pw / 2, p.ty + p.ph / 2, p.pw, p.ph, {
-          restitution: 0.4, // Less bouncy for more realistic collapse
-          friction: 0.3, // More friction to settle on ground
-          density: 0.001, // Light pieces
-          angle: (Math.random() - 0.5) * 0.8, // More random rotation
+          restitution: 0.3, // ✅ کاهش bouncy برای collapse واقعی‌تر
+          friction: 0.5, // ✅ افزایش friction برای سقوط ملایم‌تر
+          density: 0.0008, // ✅ قطعات سبک‌تر
+          angle: (Math.random() - 0.5) * 0.5, // ✅ چرخش ملایم‌تر
         });
 
-        // 💥 EXPLOSION: Strong outward force from center
+        // 💥 GENTLE COLLAPSE: نیروی خفیف برای جدا کردن قطعات
         const dx = p.tx + p.pw / 2 - vWidth / 2;
         const dy = p.ty + p.ph / 2 - vHeight / 2;
         const dist = Math.sqrt(dx * dx + dy * dy) || 1;
 
-        // Much stronger explosion force with more variation
-        const explosionStrength = 0.35 + Math.random() * 0.25; // 0.35-0.6
+        // ✅ انفجار بسیار ملایم - فقط برای جدا کردن قطعات
+        const explosionStrength = 0.08 + Math.random() * 0.06; // ✅ کاهش از 0.35-0.6 به 0.08-0.14
         Matter.Body.applyForce(body, body.position, {
           x: (dx / dist) * explosionStrength,
-          y: (dy / dist) * explosionStrength - 0.15, // Slight upward for dramatic effect
+          y: (dy / dist) * explosionStrength + 0.02, // ✅ فقط کمی به پایین
         });
 
-        // Add angular velocity for spinning during fall
-        Matter.Body.setAngularVelocity(body, (Math.random() - 0.5) * 0.3);
+        // ✅ چرخش خیلی ملایم در حین سقوط
+        Matter.Body.setAngularVelocity(body, (Math.random() - 0.5) * 0.12);
 
         bodies.push(body);
         bodiesRef.current.set(p.id, body);
@@ -325,8 +328,17 @@ const PuzzleCanvas = forwardRef<CanvasHandle, PuzzleCanvasProps>(
           console.log(`⏱️ [Canvas] Timer started`);
         }
 
+        // ✅ PAUSE HANDLING: Freeze time when isPaused is true
+        if (isPaused) {
+          // Move startTime forward to freeze elapsed time
+          startTimeRef.current = now - (lastElapsedRef.current || 0);
+          animationRef.current = requestAnimationFrame(loop);
+          return; // Skip this frame but keep loop running
+        }
+
         const totalDuration = durationMinutes * 60 * 1000;
         const elapsed = now - startTimeRef.current;
+        lastElapsedRef.current = elapsed; // Track for pause resume
 
         // Audio (before transition)
         if (elapsed < totalDuration && !isTransitioningRef.current) {
@@ -476,6 +488,7 @@ const PuzzleCanvas = forwardRef<CanvasHandle, PuzzleCanvasProps>(
       },
       [
         isSolving,
+        isPaused,
         isReady,
         durationMinutes,
         shape,
