@@ -154,7 +154,7 @@ function applyMaterialTexture(
   ctx: CanvasRenderingContext2D,
   pw: number,
   ph: number,
-  material: PieceMaterial
+  material: PieceMaterial,
 ) {
   const texture = createMaterialTexture(material, pw, ph);
   ctx.save();
@@ -185,7 +185,7 @@ export const usePuzzleLogic = () => {
       pieceCount: number,
       shape: PieceShape,
       material: PieceMaterial,
-      onProgress?: (p: number) => void
+      onProgress?: (p: number) => void,
     ) => {
       if (!img || img.naturalWidth === 0) return [];
 
@@ -213,18 +213,47 @@ export const usePuzzleLogic = () => {
 
       let pw: number, ph: number;
 
+      let hexCenterOffsetX = 0;
+      let hexCenterOffsetY = 0;
+      let brickCenterOffsetX = 0;
+      let brickCenterOffsetY = 0;
+
       if (isHex) {
+        // ✅ محاسبه pw با cols اصلی
         pw = virtualW / (cols * 0.75 + 0.25);
         ph = pw * (Math.sqrt(3) / 2);
+
+        // محاسبه تعداد ستون و ردیف واقعی
+        cols = Math.ceil(virtualW / (pw * 0.75)) + 1;
+        rows = Math.ceil(virtualH / ph) + 1;
+
+        // ✅ محاسبه عرض و ارتفاع واقعی گرید
+        const gridWidth = (cols - 1) * pw * 0.75 + pw;
+        const gridHeight = (rows - 1) * ph + ph;
+        // offset برای قرار دادن گرید در مرکز
+        hexCenterOffsetX = (virtualW - gridWidth) / 2;
+        hexCenterOffsetY = (virtualH - gridHeight) / 2;
       } else if (isBrick) {
+        // ✅ محاسبه pw با cols اصلی
         pw = virtualW / cols;
         ph = pw / 2.2;
-        rows = Math.ceil(virtualH / ph);
+
+        // محاسبه تعداد ستون و ردیف واقعی
+        cols = Math.ceil(virtualW / pw) + 1;
+        rows = Math.ceil(virtualH / ph) + 1;
+
+        // ✅ محاسبه عرض و ارتفاع واقعی گرید
+        const gridWidth = cols * pw;
+        const gridHeight = rows * ph;
+        // offset برای قرار دادن گرید در مرکز
+        brickCenterOffsetX = (virtualW - gridWidth) / 2;
+        brickCenterOffsetY = (virtualH - gridHeight) / 2;
       } else if (isDiamond) {
         pw = virtualW / (cols * 0.5);
         ph = pw * 0.62;
-        cols = Math.ceil(virtualW / (pw / 2)) + 2;
-        rows = Math.ceil(virtualH / (ph / 2)) + 2;
+        // ✅ پوشش بسیار بیشتر برای Diamond
+        cols = Math.ceil(virtualW / (pw / 2)) + 6; // از 4 به 6
+        rows = Math.ceil(virtualH / (ph / 2)) + 6; // از 4 به 6
       } else {
         pw = virtualW / cols;
         ph = virtualH / rows;
@@ -278,25 +307,27 @@ export const usePuzzleLogic = () => {
             let targetX: number, targetY: number;
 
             if (isHex) {
-              targetX = x * pw * 0.75 + pw / 2;
-              targetY = y * ph + (x % 2 === 1 ? ph / 2 : 0) + ph / 2;
+              // ✅ با استفاده از centerOffset برای قرار دادن گرید در مرکز
+              targetX = x * pw * 0.75 + pw / 2 + hexCenterOffsetX;
+              targetY = y * ph + (x % 2 === 1 ? ph / 2 : 0) + ph / 2 + hexCenterOffsetY;
             } else if (isBrick) {
-              const offset = y % 2 === 1 ? pw / 2 : 0;
-              targetX = x * pw + offset + pw / 2;
-              targetY = y * ph + ph / 2;
-              if (targetX - pw / 2 > virtualW || targetY - ph / 2 > virtualH || targetX + pw / 2 < 0)
-                continue;
+              // ✅ با استفاده از centerOffset برای قرار دادن گرید در مرکز
+              const rowOffset = y % 2 === 1 ? pw / 2 : 0;
+              targetX = x * pw + rowOffset + pw / 2 + brickCenterOffsetX;
+              targetY = y * ph + ph / 2 + brickCenterOffsetY;
             } else if (isDiamond) {
               if ((x + y) % 2 !== 0) continue;
-              targetX = x * (pw / 2);
-              targetY = y * (ph / 2);
-              if (
-                targetX > virtualW + pw / 2 ||
-                targetY > virtualH + ph / 2 ||
-                targetX < -pw / 2 ||
-                targetY < -ph / 2
-              )
-                continue;
+              // ✅ شروع از -2 برای پوشش کامل
+              targetX = (x - 2) * (pw / 2);
+              targetY = (y - 2) * (ph / 2);
+              // حذف شرط بیرون رفتن
+              // if (
+              //   targetX > virtualW + pw / 2 ||
+              //   targetY > virtualH + ph / 2 ||
+              //   targetX < -pw / 2 ||
+              //   targetY < -ph / 2
+              // )
+              //   continue;
             } else {
               targetX = x * pw + pw / 2;
               targetY = y * ph + ph / 2;
@@ -381,7 +412,7 @@ export const usePuzzleLogic = () => {
             -pw / 2 - globalPadding,
             -ph / 2 - globalPadding,
             pw + globalPadding * 2,
-            ph + globalPadding * 2
+            ph + globalPadding * 2,
           );
 
           // ✅ Apply cached material texture
@@ -412,14 +443,14 @@ export const usePuzzleLogic = () => {
       // Assembly order is now assigned on first render in puzzleRenderer
       // This saves ~100-200ms for large piece counts
       const orderArray = Array.from({ length: newPieces.length }, (_, i) => i).sort(
-        () => Math.random() - 0.5
+        () => Math.random() - 0.5,
       );
       newPieces.forEach((p, i) => (p.assemblyOrder = orderArray[i]));
 
       piecesRef.current = newPieces;
       return newPieces;
     },
-    []
+    [],
   );
 
   return { piecesRef, imageRef, createPieces };

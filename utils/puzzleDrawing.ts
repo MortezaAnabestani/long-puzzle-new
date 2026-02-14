@@ -1,6 +1,5 @@
-
-import { PieceShape } from '../types';
-import { PieceConnections } from '../hooks/usePuzzleLogic';
+import { PieceShape } from "../types";
+import { PieceConnections } from "../hooks/usePuzzleLogic";
 
 export const drawPiecePath = (
   ctx: CanvasRenderingContext2D,
@@ -8,13 +7,20 @@ export const drawPiecePath = (
   h: number,
   shape: PieceShape,
   subIndex: number = 0,
-  connections?: PieceConnections
+  connections?: PieceConnections,
 ) => {
   const x = -w / 2;
   const y = -h / 2;
-  
-  // Negative bleed (overlap) for Diamond to ensure no background shows through
-  const b = shape === PieceShape.DIAMOND ? 0.2 : (shape === PieceShape.HEXAGON ? 0.3 : 0.8); 
+
+  // ✅ Overlap بیشتر برای جلوگیری از فاصله در ترنزیشن
+  const b =
+    shape === PieceShape.DIAMOND
+      ? 1.5
+      : shape === PieceShape.HEXAGON
+        ? 3.0
+        : shape === PieceShape.BRICK
+          ? 3.5
+          : 0.8;
 
   ctx.beginPath();
 
@@ -28,7 +34,7 @@ export const drawPiecePath = (
       break;
 
     case PieceShape.HEXAGON:
-      const r = w / 2; 
+      const r = w / 2;
       for (let i = 0; i < 6; i++) {
         const angle = (Math.PI / 3) * i;
         const px = r * Math.cos(angle);
@@ -85,12 +91,14 @@ export const drawPiecePath = (
 
 function drawTab(
   ctx: CanvasRenderingContext2D,
-  x1: number, y1: number,
-  x2: number, y2: number,
+  x1: number,
+  y1: number,
+  x2: number,
+  y2: number,
   side: number,
   nx: number,
   ny: number,
-  isSquare: boolean
+  isSquare: boolean,
 ) {
   if (side === 0) {
     ctx.lineTo(x2, y2);
@@ -105,7 +113,7 @@ function drawTab(
   const tx = dx / length;
   const ty = dy / length;
 
-  const tabDepth = length * 0.22; 
+  const tabDepth = length * 0.22;
   const neckWidth = length * 0.15;
   const headWidth = length * 0.32;
 
@@ -124,34 +132,48 @@ function drawTab(
 
   ctx.lineTo(neck1x, neck1y);
   ctx.bezierCurveTo(
-    neck1x + nx * (tabDepth * 0.1) * side, neck1y + ny * (tabDepth * 0.1) * side,
-    shoulder1x - tx * (neckWidth * 0.1), shoulder1y - ty * (neckWidth * 0.1),
-    shoulder1x, shoulder1y
+    neck1x + nx * (tabDepth * 0.1) * side,
+    neck1y + ny * (tabDepth * 0.1) * side,
+    shoulder1x - tx * (neckWidth * 0.1),
+    shoulder1y - ty * (neckWidth * 0.1),
+    shoulder1x,
+    shoulder1y,
   );
   ctx.bezierCurveTo(
-    shoulder1x + tx * (headWidth * 0.4), shoulder1y + ty * (headWidth * 0.4),
-    peakX - tx * (headWidth * 0.4), peakY - ty * (headWidth * 0.4),
-    peakX, peakY
+    shoulder1x + tx * (headWidth * 0.4),
+    shoulder1y + ty * (headWidth * 0.4),
+    peakX - tx * (headWidth * 0.4),
+    peakY - ty * (headWidth * 0.4),
+    peakX,
+    peakY,
   );
   ctx.bezierCurveTo(
-    peakX + tx * (headWidth * 0.4), peakY + ty * (headWidth * 0.4),
-    shoulder2x - tx * (headWidth * 0.4), shoulder2y - ty * (headWidth * 0.4),
-    shoulder2x, shoulder2y
+    peakX + tx * (headWidth * 0.4),
+    peakY + ty * (headWidth * 0.4),
+    shoulder2x - tx * (headWidth * 0.4),
+    shoulder2y - ty * (headWidth * 0.4),
+    shoulder2x,
+    shoulder2y,
   );
   ctx.bezierCurveTo(
-    shoulder2x + tx * (neckWidth * 0.1), shoulder2y + ty * (neckWidth * 0.1),
-    neck2x + nx * (tabDepth * 0.1) * side, neck2y + ny * (tabDepth * 0.1) * side,
-    neck2x, neck2y
+    shoulder2x + tx * (neckWidth * 0.1),
+    shoulder2y + ty * (neckWidth * 0.1),
+    neck2x + nx * (tabDepth * 0.1) * side,
+    neck2y + ny * (tabDepth * 0.1) * side,
+    neck2x,
+    neck2y,
   );
   ctx.lineTo(x2, y2);
 }
 
 function drawInterlockingJigsaw(
   ctx: CanvasRenderingContext2D,
-  x: number, y: number,
-  w: number, h: number,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
   conn: PieceConnections,
-  isSquare: boolean
+  isSquare: boolean,
 ) {
   ctx.moveTo(x, y);
   drawTab(ctx, x, y, x + w, y, conn.top, 0, -1, isSquare);

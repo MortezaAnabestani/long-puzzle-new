@@ -1,18 +1,19 @@
 /**
- * 🎬 FINALE MANAGER V4 - با موج، فروریختن Matter.js و اسلایدشو
+ * 🎬 FINALE MANAGER V4 - با موج، فروریختن Matter.js، انفجار و اسلایدشو
  *
  * ترتیب رویدادها در آخرین پازل:
  * 1. پازل تکمیل می‌شود
  * 2. مکث 2 ثانیه روی پازل تکمیل شده
  * 3. پاز کوتاه (FINALE_PAUSE)
  * 4. موج بالا رونده (WAVE_DURATION)
- * 5. فروریختن با Matter.js (COLLAPSE_DURATION)
+ * 5. فروریختن با Matter.js + انفجار (COLLAPSE_DURATION)
  * 6. اسلایدشو با carousel (SLIDESHOW_DURATION)
  * 7. کارت پایانی (OUTRO_DURATION)
  * 8. پایان و دانلود
  */
 
 import { Piece } from "../hooks/usePuzzleLogic";
+import { explosionSystem } from "./explosionSystem";
 
 export interface FinalePhaseState {
   isFinale: boolean;
@@ -21,6 +22,7 @@ export interface FinalePhaseState {
   waveProgress: number;
   collapseActive: boolean;
   collapseProgress: number;
+  explosionActive: boolean; // ✅ اضافه شد
   slideshowActive: boolean;
   currentSlide: number;
   slideProgress: number;
@@ -72,6 +74,9 @@ export const getFinaleState = (elapsedAfterFinish: number): FinalePhaseState => 
   const collapseProgress = Math.min(collapseTime / COLLAPSE_DURATION, 1);
   const collapseActive = t >= COLLAPSE_START_TIME && t < COLLAPSE_END_TIME;
 
+  // 💥 انفجار فعال در زمان collapse
+  const explosionActive = collapseActive;
+
   // زوم دوربین تدریجی (استاندارد)
   const zoomScale = 1 + t / 80000;
 
@@ -96,6 +101,7 @@ export const getFinaleState = (elapsedAfterFinish: number): FinalePhaseState => 
     waveProgress,
     collapseActive,
     collapseProgress,
+    explosionActive, // ✅ اضافه شد
     slideshowActive,
     currentSlide,
     slideProgress,
@@ -140,7 +146,7 @@ export const logFinaleTimeline = () => {
   console.log("📅 [Finale Timeline V4]");
   console.log(`  0ms - ${FINALE_PAUSE}ms: Initial pause`);
   console.log(`  ${WAVE_START_TIME}ms - ${WAVE_END_TIME}ms: Wave (upward motion)`);
-  console.log(`  ${COLLAPSE_START_TIME}ms - ${COLLAPSE_END_TIME}ms: Matter.js Collapse`);
+  console.log(`  ${COLLAPSE_START_TIME}ms - ${COLLAPSE_END_TIME}ms: Matter.js Collapse + Explosion`);
   console.log(`  ${COLLAPSE_END_TIME}ms - ${SLIDESHOW_START_TIME}ms: Pre-slideshow delay`);
   console.log(
     `  ${SLIDESHOW_START_TIME}ms - ${SLIDESHOW_END_TIME}ms: Carousel Slideshow (${TOTAL_SLIDES} slides)`,
@@ -150,4 +156,34 @@ export const logFinaleTimeline = () => {
   console.log(
     `  Total finale duration: ${TOTAL_FINALE_DURATION}ms (${(TOTAL_FINALE_DURATION / 1000).toFixed(1)}s)`,
   );
+};
+
+/**
+ * 💥 راه‌اندازی فروریختن آرام برای تمام قطعات
+ * این تابع را در زمان شروع collapse صدا بزنید
+ */
+let collapseTriggered = false;
+export const triggerFinaleExplosion = (pieces: Piece[]) => {
+  if (collapseTriggered) return;
+  collapseTriggered = true;
+
+  // ایجاد لیست موقعیت‌های مرکز قطعات
+  const positions = pieces.map((p) => ({
+    id: p.id,
+    x: p.tx + p.pw / 2,
+    y: p.ty + p.ph / 2,
+  }));
+
+  // تریگر فروریختن آرام با تاخیر 100ms بین هر قطعه (خیلی آرام)
+  explosionSystem.startCollapse(positions, 100);
+
+  console.log(`🎯 Gentle collapse triggered for ${pieces.length} pieces`);
+};
+
+/**
+ * ریست کردن state فروریختن (برای فصل بعدی)
+ */
+export const resetExplosion = () => {
+  collapseTriggered = false;
+  explosionSystem.clear();
 };

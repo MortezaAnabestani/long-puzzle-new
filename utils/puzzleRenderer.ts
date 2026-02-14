@@ -3,6 +3,7 @@ import { PieceShape, MovementType, PuzzleBackground } from "../types";
 import {
   getFinaleState,
   getDiagonalWaveY,
+  triggerFinaleExplosion,
   OUTRO_DURATION,
   COLLAPSE_START_TIME,
   SLIDESHOW_END_TIME,
@@ -11,6 +12,7 @@ import { envEngine } from "./environmentRenderer";
 import { renderOutroCard } from "./outroRenderer";
 import { updateTrailHistory, renderTrailEffect } from "./trailEffects";
 import { renderCinematicCarousel } from "./cinematicCarousel";
+import { explosionSystem } from "./explosionSystem";
 
 export interface RenderOptions {
   ctx: CanvasRenderingContext2D;
@@ -157,6 +159,11 @@ export const renderPuzzleFrame = ({
 
   const elapsedAfterFinish = Math.max(0, elapsed - totalDuration);
   const fState = getFinaleState(elapsedAfterFinish);
+
+  // ─── 💥 EXPLOSION TRIGGER (فقط یک بار در شروع collapse) ──────────────────
+  if (fState.explosionActive && physicsPieces) {
+    triggerFinaleExplosion(pieces);
+  }
 
   // ─── 🔥 SLIDESHOW PHASE (با Cinematic Carousel) ────────────────────────────────────────────
   if (fState.slideshowActive && completedPuzzleSnapshots && completedPuzzleSnapshots.length > 0) {
@@ -348,14 +355,25 @@ export const renderPuzzleFrame = ({
 
   // ─── 2. RENDER COMPLETED PIECES (موج بالا رونده + نمایش در collapse) ──────────────
   for (const p of completedPieces) {
+    // ✅ اگر در حالت collapse هستیم، از موقعیت collapseSystem استفاده کن
+    if (fState.collapseActive) {
+      const collapsePos = explosionSystem.getPiecePosition(p.id);
+      if (collapsePos) {
+        ctx.save();
+        ctx.translate(collapsePos.x, collapsePos.y);
+        ctx.rotate(collapsePos.rotation);
+        ctx.drawImage(p.cachedCanvas!, -p.cachedCanvas!.width / 2, -p.cachedCanvas!.height / 2);
+        ctx.restore();
+        continue;
+      }
+      // اگر collapseSystem موقعیت نداشت، ممکن است physics داشته باشد
+      if (physicsPieces && physicsPieces.has(p.id)) {
+        continue;
+      }
+    }
+
     // 🌊 موج بالا رونده - قطعات به سمت بالا می‌روند و برمی‌گردند
     const waveY = fState.waveActive ? getDiagonalWaveY(p, elapsedAfterFinish, vWidth, vHeight) : 0;
-
-    // 💥 در فاز collapse، قطعات توسط physics رندر می‌شوند
-    // پس آنها را اینجا نمایش نمی‌دهیم
-    if (fState.collapseActive && physicsPieces && physicsPieces.has(p.id)) {
-      continue; // این قطعه توسط physics رندر می‌شود
-    }
 
     const drawX = p.tx - (p.cachedCanvas!.width - p.pw) / 2;
     const drawY = p.ty - (p.cachedCanvas!.height - p.ph) / 2 + waveY; // waveY منفی است = بالا می‌رود
@@ -369,10 +387,23 @@ export const renderPuzzleFrame = ({
     movingPieces.length > renderBatchSize ? movingPieces.slice(0, renderBatchSize) : movingPieces;
 
   for (const p of piecesToRender) {
+    // ✅ اگر در حالت collapse هستیم، از موقعیت collapseSystem استفاده کن
+    if (fState.collapseActive) {
+      const collapsePos = explosionSystem.getPiecePosition(p.id);
+      if (collapsePos) {
+        ctx.save();
+        ctx.translate(collapsePos.x, collapsePos.y);
+        ctx.rotate(collapsePos.rotation);
+        ctx.drawImage(p.cachedCanvas!, -p.cachedCanvas!.width / 2, -p.cachedCanvas!.height / 2);
+        ctx.restore();
+        continue;
+      }
+    }
+
     const physicsData = physicsPieces?.get(p.id);
 
     if (physicsData) {
-      // Physics mode (final chapter)
+      // Physics mode (final chapter) - فقط اگر collapseSystem موقعیت نداشت
       ctx.save();
       ctx.translate(physicsData.x, physicsData.y);
       ctx.rotate(physicsData.angle);
@@ -408,6 +439,12 @@ export const renderPuzzleFrame = ({
   }
 
   ctx.restore();
+
+  // ─── 💥 EXPLOSION RENDERING (در فاز collapse) ─────────────────────────
+  if (fState.explosionActive) {
+    explosionSystem.update(16.67); // ~60 FPS
+    explosionSystem.render(ctx);
+  }
 
   // ─── 4. NARRATIVE TEXT OVERLAY ────────────────────────────────────
   if (!physicsPieces && narrativeText) {
