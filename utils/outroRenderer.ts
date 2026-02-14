@@ -149,13 +149,18 @@ export const renderOutroCard = ({
   // ✅ POSITION CALCULATION
   const centerX = vWidth / 2;
   let centerY: number;
+  let zIndex: number = 0;
 
   if (position === "top") {
     // ✅ TOP POSITION: For mid-video CTAs at 2.5min and 5min
-    centerY = 350; // Higher up on screen with some padding from top
+    centerY = 350;
+    zIndex = 1000; // Ensure it renders above all game elements
+    // Higher up on screen with some padding from top
   } else {
     // ✅ CENTER POSITION: For finale outro (default)
-    centerY = vHeight / 2 - 80; // Original center position
+    centerY = vHeight / 2 - 80;
+    zIndex = 1000; // Ensure it renders above all game elements
+    // Original center position
   }
 
   const PRIMARY_COLOR = "#007acc";

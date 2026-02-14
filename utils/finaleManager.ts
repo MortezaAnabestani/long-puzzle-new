@@ -19,8 +19,8 @@ export interface FinalePhaseState {
   pauseActive: boolean;
   waveActive: boolean;
   waveProgress: number;
-  collapseActive: boolean;
-  collapseProgress: number;
+  // collapseActive: boolean;
+  // collapseProgress: number;
   slideshowActive: boolean;
   currentSlide: number;
   slideProgress: number;
@@ -67,10 +67,10 @@ export const getFinaleState = (elapsedAfterFinish: number): FinalePhaseState => 
   const waveProgress = Math.min(waveTime / WAVE_DURATION, 1);
   const waveActive = t > WAVE_START_TIME && t < WAVE_END_TIME;
 
-  // 💥 فاز 3: فروریختن با Matter.js (بدون explosionSystem)
-  const collapseTime = Math.max(0, t - COLLAPSE_START_TIME);
-  const collapseProgress = Math.min(collapseTime / COLLAPSE_DURATION, 1);
-  const collapseActive = t >= COLLAPSE_START_TIME && t < COLLAPSE_END_TIME;
+  // // 💥 فاز 3: فروریختن با Matter.js (بدون explosionSystem)
+  // const collapseTime = Math.max(0, t - COLLAPSE_START_TIME);
+  // const collapseProgress = Math.min(collapseTime / COLLAPSE_DURATION, 1);
+  // const collapseActive = t >= COLLAPSE_START_TIME && t < COLLAPSE_END_TIME;
 
   // زوم دوربین تدریجی (استاندارد)
   const zoomScale = 1 + t / 80000;
@@ -94,8 +94,8 @@ export const getFinaleState = (elapsedAfterFinish: number): FinalePhaseState => 
     pauseActive,
     waveActive,
     waveProgress,
-    collapseActive,
-    collapseProgress,
+    // collapseActive,
+    // collapseProgress,
     slideshowActive,
     currentSlide,
     slideProgress,

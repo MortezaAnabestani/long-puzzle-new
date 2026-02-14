@@ -152,9 +152,13 @@ const PuzzleCanvas = forwardRef<CanvasHandle, PuzzleCanvasProps>(
 
       if (isLastChapter) {
         engine.world.gravity.y = 2.0;
-        const ground = Matter.Bodies.rectangle(vWidth / 2, vHeight + 500, vWidth * 10, 1000, {
-          isStatic: true,
-        });
+        const ground = Matter.Bodies.rectangle(
+          vWidth / 2, // مرکز افقی
+          vHeight + 500, // 500 پیکسل پایین‌تر از صفحه
+          vWidth * 10, // عرض بسیار زیاد
+          1000, // ارتفاع
+          { isStatic: true }, // بدنه ثابت
+        );
         Matter.World.add(engine.world, [ground]);
       }
 
@@ -169,32 +173,49 @@ const PuzzleCanvas = forwardRef<CanvasHandle, PuzzleCanvasProps>(
 
       isPhysicsActiveRef.current = true;
 
+      // پخش صدای انفجار
       if (!destructionPlayedRef.current) {
         sonicEngine.play("DESTRUCT", 1.0);
         destructionPlayedRef.current = true;
       }
 
+      // انتخاب 70% از قطعات به صورت تصادفی
       const remainingPieces = piecesRef.current
         .sort(() => Math.random() - 0.5)
         .slice(0, Math.floor(piecesRef.current.length * 0.7));
 
       const bodies: any[] = [];
+
+      // ایجاد بدنه فیزیکی برای هر قطعه
       remainingPieces.forEach((p) => {
-        const body = Matter.Bodies.rectangle(p.tx + p.pw / 2, p.ty + p.ph / 2, p.pw, p.ph, {
-          restitution: 0.6,
-          friction: 0.1,
-          angle: (Math.random() - 0.5) * 0.5,
-        });
+        const body = Matter.Bodies.rectangle(
+          p.tx + p.pw / 2, // موقعیت مرکز قطعه
+          p.ty + p.ph / 2,
+          p.pw, // عرض قطعه
+          p.ph, // ارتفاع قطعه
+          {
+            restitution: 0.6, // ضریب برگشت (انعطاف‌پذیری)
+            friction: 0.1, // ضریب اصطکاک
+            angle: (Math.random() - 0.5) * 0.5, // زاویه تصادفی
+          },
+        );
+
+        // محاسبه فاصله از مرکز صفحه
         const dx = p.tx + p.pw / 2 - vWidth / 2;
         const dy = p.ty + p.ph / 2 - vHeight / 2;
         const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+
+        // اعمال نیروی انفجار شعاعی از مرکز به بیرون
         Matter.Body.applyForce(body, body.position, {
           x: (dx / dist) * 0.16 * Math.random(),
           y: (dy / dist) * 0.16 * Math.random() - 0.08,
         });
+
         bodies.push(body);
         bodiesRef.current.set(p.id, body);
       });
+
+      // افزودن تمام اجسام به دنیای فیزیک
       Matter.World.add(engineRef.current.world, bodies);
       piecesRef.current = remainingPieces;
     }, [piecesRef, getMatter]);
