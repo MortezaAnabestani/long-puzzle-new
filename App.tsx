@@ -567,6 +567,7 @@ const AppContent: React.FC = () => {
             }
             isTransitioning={state.isTransitioning}
             completedPuzzleSnapshots={completedPuzzleSnapshots.current}
+            globalElapsedTime={globalElapsedTime}
           />
         </section>
 

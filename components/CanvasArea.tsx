@@ -28,6 +28,7 @@ interface CanvasAreaProps {
   isLastChapter: boolean;
   isTransitioning: boolean; // ✅ NEW: وضعیت ترنزیشن از App
   completedPuzzleSnapshots?: HTMLImageElement[];
+  globalElapsedTime: number; // ✅ این خط رو اضافه کنید
 }
 
 const CanvasArea: React.FC<CanvasAreaProps> = ({
@@ -55,6 +56,7 @@ const CanvasArea: React.FC<CanvasAreaProps> = ({
   isLastChapter,
   isTransitioning,
   completedPuzzleSnapshots,
+  globalElapsedTime, // ✅ این خط رو اضافه کنید
 }) => {
   const phoneFrameRef = useRef<HTMLDivElement>(null);
 
@@ -130,6 +132,7 @@ const CanvasArea: React.FC<CanvasAreaProps> = ({
                 isLastChapter={isLastChapter}
                 isTransitioning={isTransitioning}
                 completedPuzzleSnapshots={completedPuzzleSnapshots}
+                globalElapsedTime={globalElapsedTime} // ✅ این خط رو اضافه کنید
               />
             ) : (
               <div className="absolute inset-0 flex flex-col items-center justify-center bg-[#050508]">

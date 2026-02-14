@@ -3,7 +3,6 @@ import { PieceShape, MovementType, PuzzleBackground } from "../types";
 import {
   getFinaleState,
   getDiagonalWaveY,
-  triggerFinaleExplosion,
   OUTRO_DURATION,
   COLLAPSE_START_TIME,
   SLIDESHOW_END_TIME,
@@ -12,7 +11,6 @@ import { envEngine } from "./environmentRenderer";
 import { renderOutroCard } from "./outroRenderer";
 import { updateTrailHistory, renderTrailEffect } from "./trailEffects";
 import { renderCinematicCarousel } from "./cinematicCarousel";
-import { explosionSystem } from "./explosionSystem";
 
 export interface RenderOptions {
   ctx: CanvasRenderingContext2D;
@@ -28,6 +26,7 @@ export interface RenderOptions {
   narrativeText?: string;
   channelLogo?: HTMLImageElement;
   completedPuzzleSnapshots?: HTMLImageElement[]; // 🔥 برای اسلایدشو
+  globalElapsedTime?: number; // ✅ NEW: کل زمان سپری شده در ویدئو (نه فقط فصل فعلی)
 }
 
 // ─── 🔥 PHASE A FIX: CACHED SORTING ───────────────────────────────────
@@ -151,6 +150,7 @@ export const renderPuzzleFrame = ({
   narrativeText = "",
   channelLogo,
   completedPuzzleSnapshots,
+  globalElapsedTime = 0, // ✅ NEW: default to 0 if not provided
 }: RenderOptions): number => {
   const vWidth = 1080;
   const vHeight = 2280;
@@ -160,10 +160,7 @@ export const renderPuzzleFrame = ({
   const elapsedAfterFinish = Math.max(0, elapsed - totalDuration);
   const fState = getFinaleState(elapsedAfterFinish);
 
-  // ─── 💥 EXPLOSION TRIGGER (فقط یک بار در شروع collapse) ──────────────────
-  if (fState.explosionActive && physicsPieces) {
-    triggerFinaleExplosion(pieces);
-  }
+  // ✅ REMOVED: explosionSystem - Matter.js handles collapse physics
 
   // ─── 🔥 SLIDESHOW PHASE (با Cinematic Carousel) ────────────────────────────────────────────
   if (fState.slideshowActive && completedPuzzleSnapshots && completedPuzzleSnapshots.length > 0) {
@@ -178,7 +175,7 @@ export const renderPuzzleFrame = ({
     return 100; // slideshow active
   }
 
-  // ─── 🔥 OUTRO CARD PHASE ───────────────────────────────────────────
+  // ─── 🔥 OUTRO CARD PHASE (فینال) ───────────────────────────────────────────
   // Check if we should show outro (after slideshow ends OR if outro is explicitly active)
   if (fState.outroActive || elapsedAfterFinish >= SLIDESHOW_END_TIME) {
     renderOutroCard({
@@ -192,121 +189,17 @@ export const renderPuzzleFrame = ({
     return 100; // outro active
   }
 
-  // ─── ✅ MID-VIDEO OUTRO CTAs (2.5min and 5min) ────────────────────
-  // Show outro card at specific timestamps during normal playback
-  const elapsedSeconds = elapsed / 1000;
+  // ─── ✅ MID-VIDEO OUTRO CTAs (2.5min and 5min) - با استفاده از globalElapsedTime ────────────────────
+  const globalSeconds = globalElapsedTime / 1000;
   const CTA_DURATION = 3; // 3 seconds duration for each CTA
 
   // 2.5 minute mark (150 seconds): Show for 3 seconds
-  const isMidCTA1 = elapsedSeconds >= 150 && elapsedSeconds < 150 + CTA_DURATION;
+  const isMidCTA1 = globalSeconds >= 150 && globalSeconds < 150 + CTA_DURATION;
 
   // 5 minute mark (300 seconds): Show for 3 seconds
-  const isMidCTA2 = elapsedSeconds >= 300 && elapsedSeconds < 300 + CTA_DURATION;
+  const isMidCTA2 = globalSeconds >= 300 && globalSeconds < 300 + CTA_DURATION;
 
-  if (isMidCTA1 || isMidCTA2) {
-    // First render the normal puzzle background
-    if (!physicsPieces) {
-      envEngine.render(ctx, img, elapsed, vWidth, vHeight);
-    } else {
-      ctx.fillStyle = "#050505";
-      ctx.fillRect(0, 0, vWidth, vHeight);
-    }
-
-    ctx.save();
-    if (fState.isFinale) {
-      ctx.translate(vWidth / 2, vHeight / 2);
-      ctx.scale(fState.zoomScale, fState.zoomScale);
-      ctx.translate(-vWidth / 2, -vHeight / 2);
-    }
-
-    // Ghost preview
-    ctx.globalAlpha = 0.015;
-    ctx.drawImage(img, 0, 0, vWidth, vHeight);
-    ctx.globalAlpha = 1.0;
-
-    // Render pieces normally (continued below after this CTA check)
-    const sorted = getSortedPieces(pieces);
-    const completedPieces: Piece[] = [];
-    const movingPieces: Piece[] = [];
-
-    for (const p of sorted) {
-      if (physicsPieces?.has(p.id)) {
-        movingPieces.push(p);
-        continue;
-      }
-
-      const delay = (p.assemblyOrder / totalPieces) * (totalDuration - 2700);
-      const tRaw = Math.max(0, Math.min((elapsed - delay) / 2700, 1));
-      (p as any).tRaw = tRaw;
-
-      if (tRaw >= 0.9999) {
-        completedPieces.push(p);
-      } else if (tRaw > 0) {
-        movingPieces.push(p);
-      }
-    }
-
-    // Render completed pieces
-    for (const p of completedPieces) {
-      const drawX = p.tx - (p.cachedCanvas!.width - p.pw) / 2;
-      const drawY = p.ty - (p.cachedCanvas!.height - p.ph) / 2;
-      ctx.drawImage(p.cachedCanvas!, drawX, drawY);
-    }
-
-    // Render moving pieces
-    const piecesToRender =
-      movingPieces.length > renderBatchSize ? movingPieces.slice(0, renderBatchSize) : movingPieces;
-
-    for (const p of piecesToRender) {
-      const physicsData = physicsPieces?.get(p.id);
-
-      if (physicsData) {
-        ctx.save();
-        ctx.translate(physicsData.x, physicsData.y);
-        ctx.rotate(physicsData.angle);
-        ctx.drawImage(p.cachedCanvas!, -p.cachedCanvas!.width / 2, -p.cachedCanvas!.height / 2);
-        ctx.restore();
-        continue;
-      }
-
-      const tRaw = (p as any).tRaw;
-      const pos = calculateKineticTransform(p, tRaw, movement, vWidth, vHeight);
-
-      if (tRaw >= 0.1 && tRaw <= 0.85 && p.id % 3 === 0) {
-        updateTrailHistory(p, pos.x, pos.y, pos.rot, pos.scale, elapsed, movement, tRaw);
-        renderTrailEffect(ctx, p, movement);
-      }
-
-      ctx.save();
-      ctx.translate(pos.x, pos.y);
-      ctx.rotate(pos.rot);
-      ctx.scale(pos.scale, pos.scale);
-
-      if (!fState.isFinale) {
-        ctx.shadowColor = "rgba(0,0,0,0.6)";
-        ctx.shadowBlur = 15;
-      }
-
-      ctx.drawImage(p.cachedCanvas!, -p.cachedCanvas!.width / 2, -p.cachedCanvas!.height / 2);
-      ctx.restore();
-    }
-
-    ctx.restore();
-
-    // ✅ NOW render the CTA on top with semi-transparent background
-    renderOutroCard({
-      ctx,
-      vWidth,
-      vHeight,
-      elapsedAfterFinish: 0, // Not used for top position
-      channelLogo,
-      position: "top", // ✅ Top position for mid-video CTAs
-    });
-
-    return (completedPieces.length / totalPieces) * 100;
-  }
-
-  // ─── 1. ENVIRONMENT ───────────────────────────────────────────────
+  // ✅ رندر پس‌زمینه اول (پازل عادی)
   if (!physicsPieces) {
     envEngine.render(ctx, img, elapsed, vWidth, vHeight);
   } else {
@@ -353,24 +246,9 @@ export const renderPuzzleFrame = ({
     }
   }
 
-  // ─── 2. RENDER COMPLETED PIECES (موج بالا رونده + نمایش در collapse) ──────────────
+  // ─── 2. RENDER COMPLETED PIECES (موج بالا رونده - بدون collapse) ──────────────
   for (const p of completedPieces) {
-    // ✅ اگر در حالت collapse هستیم، از موقعیت collapseSystem استفاده کن
-    if (fState.collapseActive) {
-      const collapsePos = explosionSystem.getPiecePosition(p.id);
-      if (collapsePos) {
-        ctx.save();
-        ctx.translate(collapsePos.x, collapsePos.y);
-        ctx.rotate(collapsePos.rotation);
-        ctx.drawImage(p.cachedCanvas!, -p.cachedCanvas!.width / 2, -p.cachedCanvas!.height / 2);
-        ctx.restore();
-        continue;
-      }
-      // اگر collapseSystem موقعیت نداشت، ممکن است physics داشته باشد
-      if (physicsPieces && physicsPieces.has(p.id)) {
-        continue;
-      }
-    }
+    // ✅ REMOVED: collapseSystem logic - Matter.js handles physics directly in PuzzleCanvas
 
     // 🌊 موج بالا رونده - قطعات به سمت بالا می‌روند و برمی‌گردند
     const waveY = fState.waveActive ? getDiagonalWaveY(p, elapsedAfterFinish, vWidth, vHeight) : 0;
@@ -387,23 +265,12 @@ export const renderPuzzleFrame = ({
     movingPieces.length > renderBatchSize ? movingPieces.slice(0, renderBatchSize) : movingPieces;
 
   for (const p of piecesToRender) {
-    // ✅ اگر در حالت collapse هستیم، از موقعیت collapseSystem استفاده کن
-    if (fState.collapseActive) {
-      const collapsePos = explosionSystem.getPiecePosition(p.id);
-      if (collapsePos) {
-        ctx.save();
-        ctx.translate(collapsePos.x, collapsePos.y);
-        ctx.rotate(collapsePos.rotation);
-        ctx.drawImage(p.cachedCanvas!, -p.cachedCanvas!.width / 2, -p.cachedCanvas!.height / 2);
-        ctx.restore();
-        continue;
-      }
-    }
+    // ✅ REMOVED: collapseSystem logic - Matter.js handles physics
 
     const physicsData = physicsPieces?.get(p.id);
 
     if (physicsData) {
-      // Physics mode (final chapter) - فقط اگر collapseSystem موقعیت نداشت
+      // Physics mode (final chapter) - Matter.js provides position
       ctx.save();
       ctx.translate(physicsData.x, physicsData.y);
       ctx.rotate(physicsData.angle);
@@ -440,14 +307,22 @@ export const renderPuzzleFrame = ({
 
   ctx.restore();
 
-  // ─── 💥 EXPLOSION RENDERING (در فاز collapse) ─────────────────────────
-  if (fState.explosionActive) {
-    explosionSystem.update(16.67); // ~60 FPS
-    explosionSystem.render(ctx);
+  // ✅ REMOVED: explosionSystem rendering - Matter.js handles all physics
+
+  // ─── ✅ نمایش CTA در دقیقه 2.5 و 5 (روی پازل عادی) ────────────────────
+  if (isMidCTA1 || isMidCTA2) {
+    renderOutroCard({
+      ctx,
+      vWidth,
+      vHeight,
+      elapsedAfterFinish: 0, // Not used for top position
+      channelLogo,
+      position: "top", // ✅ Top position for mid-video CTAs
+    });
   }
 
   // ─── 4. NARRATIVE TEXT OVERLAY ────────────────────────────────────
-  if (!physicsPieces && narrativeText) {
+  if (!physicsPieces && narrativeText && !isMidCTA1 && !isMidCTA2) {
     const progressPercent = (Math.min(elapsed, totalDuration) / totalDuration) * 100;
 
     let displayText = "";

@@ -15,6 +15,7 @@ import PuzzleOverlay from "./puzzle/PuzzleOverlay";
 import { transitionEngine } from "../utils/transitions/transitionEngine";
 import { renderTransition } from "../utils/transitions/transitionRenderer";
 
+// ✅ CHANGE 1: Add globalElapsedTime to Props interface
 interface PuzzleCanvasProps {
   imageUrl: string | null;
   durationMinutes: number;
@@ -40,6 +41,7 @@ interface PuzzleCanvasProps {
   totalDurationMinutes?: number;
   currentChapterIndex?: number;
   completedPuzzleSnapshots?: HTMLImageElement[];
+  globalElapsedTime: number; // ✅ NEW: کل زمان سپری شده در ویدئو
 }
 
 export interface CanvasHandle {
@@ -71,6 +73,7 @@ const PuzzleCanvas = forwardRef<CanvasHandle, PuzzleCanvasProps>(
       isLastChapter,
       isTransitioning,
       completedPuzzleSnapshots,
+      globalElapsedTime, // ✅ CHANGE 2: Destructure globalElapsedTime from props
     },
     ref,
   ) => {
@@ -166,47 +169,35 @@ const PuzzleCanvas = forwardRef<CanvasHandle, PuzzleCanvasProps>(
 
       isPhysicsActiveRef.current = true;
 
-      // 💥 Play explosion sound for dramatic effect
       if (!destructionPlayedRef.current) {
-        sonicEngine.play("DESTRUCT", 1.5); // Louder for explosion
+        sonicEngine.play("DESTRUCT", 1.0);
         destructionPlayedRef.current = true;
       }
 
-      // ✅ Use ALL pieces for realistic collapse
-      const allPieces = piecesRef.current;
+      const remainingPieces = piecesRef.current
+        .sort(() => Math.random() - 0.5)
+        .slice(0, Math.floor(piecesRef.current.length * 0.7));
 
       const bodies: any[] = [];
-      allPieces.forEach((p) => {
-        // Create physics body for each piece
+      remainingPieces.forEach((p) => {
         const body = Matter.Bodies.rectangle(p.tx + p.pw / 2, p.ty + p.ph / 2, p.pw, p.ph, {
-          restitution: 0.3, // ✅ کاهش bouncy برای collapse واقعی‌تر
-          friction: 0.5, // ✅ افزایش friction برای سقوط ملایم‌تر
-          density: 0.0008, // ✅ قطعات سبک‌تر
-          angle: (Math.random() - 0.5) * 0.5, // ✅ چرخش ملایم‌تر
+          restitution: 0.6,
+          friction: 0.1,
+          angle: (Math.random() - 0.5) * 0.5,
         });
-
-        // 💥 GENTLE COLLAPSE: نیروی خفیف برای جدا کردن قطعات
         const dx = p.tx + p.pw / 2 - vWidth / 2;
         const dy = p.ty + p.ph / 2 - vHeight / 2;
         const dist = Math.sqrt(dx * dx + dy * dy) || 1;
-
-        // ✅ انفجار بسیار ملایم - فقط برای جدا کردن قطعات
-        const explosionStrength = 0.08 + Math.random() * 0.06; // ✅ کاهش از 0.35-0.6 به 0.08-0.14
         Matter.Body.applyForce(body, body.position, {
-          x: (dx / dist) * explosionStrength,
-          y: (dy / dist) * explosionStrength + 0.02, // ✅ فقط کمی به پایین
+          x: (dx / dist) * 0.16 * Math.random(),
+          y: (dy / dist) * 0.16 * Math.random() - 0.08,
         });
-
-        // ✅ چرخش خیلی ملایم در حین سقوط
-        Matter.Body.setAngularVelocity(body, (Math.random() - 0.5) * 0.12);
-
         bodies.push(body);
         bodiesRef.current.set(p.id, body);
       });
-
       Matter.World.add(engineRef.current.world, bodies);
-      console.log(`💥 [Physics] ${bodies.length} pieces exploding and collapsing to ground`);
-    }, [piecesRef, getMatter, vWidth, vHeight]);
+      piecesRef.current = remainingPieces;
+    }, [piecesRef, getMatter]);
 
     // ─── CLEANUP ────────────────────────────────────────────────────
     const cleanupChapter = useCallback(() => {
@@ -446,6 +437,7 @@ const PuzzleCanvas = forwardRef<CanvasHandle, PuzzleCanvasProps>(
             );
           } else {
             // Normal render
+            // ✅ CHANGE 3: Pass globalElapsedTime to renderPuzzleFrame
             renderPuzzleFrame({
               ctx,
               img: imageRef.current,
@@ -460,6 +452,7 @@ const PuzzleCanvas = forwardRef<CanvasHandle, PuzzleCanvasProps>(
               narrativeText: showDocumentaryTips ? narrativeText : "",
               channelLogo: logoImgRef.current || undefined,
               completedPuzzleSnapshots: isLastChapter ? completedPuzzleSnapshots : undefined,
+              globalElapsedTime, // ✅ NEW: Pass globalElapsedTime
             });
           }
 
@@ -516,6 +509,7 @@ const PuzzleCanvas = forwardRef<CanvasHandle, PuzzleCanvasProps>(
         vWidth,
         vHeight,
         completedPuzzleSnapshots,
+        globalElapsedTime, // ✅ Add to dependencies
       ],
     );
 
