@@ -112,6 +112,15 @@ const PuzzleCanvas = forwardRef<CanvasHandle, PuzzleCanvasProps>(
     useImperativeHandle(ref, () => ({ getCanvas: () => canvasRef.current }));
     const getMatter = useCallback(() => (window as any).Matter, []);
 
+    // ─── CANVAS MOUNT DETECTION ─────────────────────────────────────
+    useEffect(() => {
+      if (canvasRef.current) {
+        console.log(`🎨 [PuzzleCanvas] Canvas element mounted! (${vWidth}x${vHeight})`);
+      } else {
+        console.log(`⚠️ [PuzzleCanvas] Canvas element is null on mount!`);
+      }
+    }, []); // Run once on mount
+
     // ─── LOGO ───────────────────────────────────────────────────────
     useEffect(() => {
       if (channelLogoUrl) {

@@ -121,38 +121,64 @@ const RecordingSystem: React.FC<RecordingSystemProps> = ({
   // Creating a second one (after disconnecting the first) breaks playback/recording from video 2 onwards.
   // The same source node continues to output the new audio when the element's src is updated.
 
-  // ✅ Start/stop recording based on isRecording state
-  // Also retry if canvas is not ready at first
+  // ✅ Start recording immediately with smart canvas polling
   useEffect(() => {
-    let retryTimeout: number | null = null;
-    let mounted = true;
+    if (isRecording) {
+      console.log(`🎬 [RecordingSystem] isRecording=true, starting recording process...`);
 
-    const attemptStart = async () => {
-      if (!mounted || !isRecording) return;
+      // ✅ Use polling to check for canvas availability
+      let attempts = 0;
+      const maxAttempts = 50; // 50 attempts * 100ms = 5 seconds max wait
+      let pollInterval: number | null = null;
 
-      const canvas = getCanvas();
-      if (!canvas) {
-        console.warn(`⚠️ [RecordingSystem] Canvas not ready, retrying in 500ms...`);
-        retryTimeout = window.setTimeout(() => {
-          if (mounted && isRecording) attemptStart();
-        }, 500);
-        return;
+      const pollForCanvas = () => {
+        const canvas = getCanvas();
+        attempts++;
+
+        if (canvas) {
+          console.log(`✅ [RecordingSystem] Canvas found after ${attempts} attempts (${attempts * 100}ms)`);
+          console.log(`   Canvas size: ${canvas.width}x${canvas.height}`);
+          if (pollInterval) clearInterval(pollInterval);
+          startRecording();
+        } else if (attempts < maxAttempts) {
+          if (attempts % 10 === 0 || attempts <= 3) {
+            console.log(`⏳ [RecordingSystem] Canvas not ready, attempt ${attempts}/${maxAttempts}...`);
+          }
+        } else {
+          console.error(
+            `❌ [RecordingSystem] Canvas not found after ${maxAttempts} attempts (${maxAttempts * 100}ms = 5 seconds)!`,
+          );
+          console.error(`   Possible reasons:`);
+          console.error(`   1. PuzzleCanvas component never mounted (check if imageUrl is set in App.tsx)`);
+          console.error(`   2. canvasRef.current is null (check PuzzleCanvas implementation)`);
+          console.error(`   3. getCanvas() function is not returning the canvas element`);
+          console.error(`   📍 Check CanvasArea.tsx line 108: {imageUrl ? <PuzzleCanvas /> : <Loading />}`);
+          if (pollInterval) clearInterval(pollInterval);
+        }
+      };
+
+      // Try immediately first
+      console.log(`🔍 [RecordingSystem] Checking for canvas immediately...`);
+      pollForCanvas();
+
+      // If not found, poll every 100ms
+      if (!getCanvas()) {
+        console.log(`⏳ [RecordingSystem] Canvas not found immediately, starting polling every 100ms...`);
+        pollInterval = window.setInterval(pollForCanvas, 100);
       }
 
-      // Canvas is ready, start recording
-      startRecording();
-    };
-
-    if (isRecording) {
-      attemptStart();
+      // Cleanup function
+      return () => {
+        if (pollInterval) {
+          console.log(`🧹 [RecordingSystem] Cleanup: Stopping poll interval`);
+          clearInterval(pollInterval);
+        }
+        console.log(`🧹 [RecordingSystem] Cleanup for isRecording=true`);
+      };
     } else {
+      console.log(`🛑 [RecordingSystem] isRecording=false, stopping...`);
       stopRecording();
     }
-
-    return () => {
-      mounted = false;
-      if (retryTimeout) clearTimeout(retryTimeout);
-    };
   }, [isRecording]);
 
   const startRecording = async () => {
@@ -167,13 +193,22 @@ const RecordingSystem: React.FC<RecordingSystemProps> = ({
     const useBuffer = !!musicBufferRef?.current;
 
     console.log(`🎬 [RecordingSystem] Starting recording...`);
-    console.log(`   Canvas: ${canvas ? "OK" : "MISSING"}`);
+    console.log(`   Canvas: ${canvas ? "OK" : "NULL (will record blank until ready)"}`);
     console.log(`   Music source: ${useBuffer ? "AudioBuffer (Web Audio API)" : "HTMLAudioElement"}`);
 
+    // ✅ FIX: Don't fail if canvas is null - it will become available soon
+    // MediaRecorder will just record blank frames until canvas starts rendering
     if (!canvas) {
-      console.error(`❌ [RecordingSystem] Cannot start - missing canvas`);
-      return;
+      console.warn(`⚠️ [RecordingSystem] Canvas is null, but continuing anyway...`);
+      console.warn(`   Recording will capture blank frames until canvas becomes ready`);
+      // We could wait a bit more, but let's proceed - the canvas should exist in DOM
+      const retryCanvas = getCanvas();
+      if (!retryCanvas) {
+        console.error(`❌ [RecordingSystem] Canvas still null after retry, aborting`);
+        return;
+      }
     }
+
     if (!useBuffer && !audioEl) {
       console.error(`❌ [RecordingSystem] Cannot start - missing audio element and no music buffer`);
       return;
@@ -257,7 +292,10 @@ const RecordingSystem: React.FC<RecordingSystemProps> = ({
 
       chunksRef.current = [];
       recorder.ondataavailable = (e) => {
-        if (e.data.size > 0) chunksRef.current.push(e.data);
+        if (e.data.size > 0) {
+          console.log(`📦 [RecordingSystem] Chunk received: ${(e.data.size / 1024).toFixed(2)}KB`);
+          chunksRef.current.push(e.data);
+        }
       };
 
       recorder.onstop = () => {
@@ -280,7 +318,9 @@ const RecordingSystem: React.FC<RecordingSystemProps> = ({
         console.log(`✅ [RecordingSystem] onRecordingComplete called successfully`);
       };
 
-      recorder.start(1000);
+      // FIX: Request data every 100ms to ensure all data is captured
+      // Without timeslice, data is only collected when stop() is called
+      recorder.start(100);
       mediaRecorderRef.current = recorder;
     } catch (e) {
       console.error("Recording Engine Failure:", e);
@@ -299,8 +339,19 @@ const RecordingSystem: React.FC<RecordingSystemProps> = ({
       if (musicGainRef.current && ctx) {
         musicGainRef.current.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.5);
       }
+
+      // Request any remaining data before stopping
+      try {
+        if (mediaRecorderRef.current.state === "recording") {
+          mediaRecorderRef.current.requestData();
+        }
+      } catch (e) {
+        console.warn("⚠️ [RecordingSystem] requestData failed:", e);
+      }
+
       setTimeout(() => {
         if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
+          console.log(`🛑 [RecordingSystem] Stopping MediaRecorder...`);
           mediaRecorderRef.current.stop();
         }
       }, 500);

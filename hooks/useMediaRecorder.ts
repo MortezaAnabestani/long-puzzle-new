@@ -1,9 +1,8 @@
-
-import React, { useRef, useState, useCallback } from 'react';
+import React, { useRef, useState, useCallback } from "react";
 
 export const useMediaRecorder = (
   canvasRef: React.RefObject<HTMLCanvasElement | null>,
-  audioRef: React.RefObject<HTMLAudioElement | null>
+  audioRef: React.RefObject<HTMLAudioElement | null>,
 ) => {
   const [isRecording, setIsRecording] = useState(false);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -21,10 +20,11 @@ export const useMediaRecorder = (
     if (audioRef.current && audioRef.current.src) {
       try {
         // Try to capture audio stream from the audio element
-        const audioStream = (audioRef.current as any).captureStream ?
-                           (audioRef.current as any).captureStream() :
-                           (audioRef.current as any).mozCaptureStream ?
-                           (audioRef.current as any).mozCaptureStream() : null;
+        const audioStream = (audioRef.current as any).captureStream
+          ? (audioRef.current as any).captureStream()
+          : (audioRef.current as any).mozCaptureStream
+            ? (audioRef.current as any).mozCaptureStream()
+            : null;
 
         if (audioStream) {
           const audioTracks = audioStream.getAudioTracks();
@@ -50,30 +50,36 @@ export const useMediaRecorder = (
 
     // 4. Select Best Supported MIME Type (Prioritizing MP4/H264/AAC)
     const mimeTypes = [
-      'video/mp4;codecs=avc1,mp4a.40.2', // H.264 + AAC (Standard MP4)
-      'video/mp4;codecs=avc1',           // H.264 only
-      'video/mp4',                       // MP4 Container
-      'video/webm;codecs=vp9,opus'       // Fallback to WebM
+      "video/mp4;codecs=avc1,mp4a.40.2", // H.264 + AAC (Standard MP4)
+      "video/mp4;codecs=avc1", // H.264 only
+      "video/mp4", // MP4 Container
+      "video/webm;codecs=vp9,opus", // Fallback to WebM
     ];
 
-    const selectedMimeType = mimeTypes.find(type => MediaRecorder.isTypeSupported(type)) || '';
+    const selectedMimeType = mimeTypes.find((type) => MediaRecorder.isTypeSupported(type)) || "";
 
     const recorder = new MediaRecorder(combinedStream, {
       mimeType: selectedMimeType,
-      videoBitsPerSecond: 50000000 // 50Mbps for High Quality
+      videoBitsPerSecond: 50000000, // 50Mbps for High Quality
     });
 
     recorder.ondataavailable = (e) => {
-      if (e.data.size > 0) chunksRef.current.push(e.data);
+      if (e.data.size > 0) {
+        console.log(`📦 [MediaRecorder] Chunk received: ${(e.data.size / 1024).toFixed(2)}KB`);
+        chunksRef.current.push(e.data);
+      }
     };
 
     recorder.onstop = () => {
-      const isMp4 = selectedMimeType.includes('mp4');
-      const extension = isMp4 ? 'mp4' : 'webm';
+      const isMp4 = selectedMimeType.includes("mp4");
+      const extension = isMp4 ? "mp4" : "webm";
       const blob = new Blob(chunksRef.current, { type: selectedMimeType });
+      console.log(
+        `📹 [MediaRecorder] Recording complete! Total size: ${(blob.size / 1024 / 1024).toFixed(2)}MB, Chunks: ${chunksRef.current.length}`,
+      );
       const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.style.display = 'none';
+      const a = document.createElement("a");
+      a.style.display = "none";
       a.href = url;
       a.download = `ShortPuzzleMaker-Studio-${Date.now()}.${extension}`;
       document.body.appendChild(a);
@@ -82,14 +88,31 @@ export const useMediaRecorder = (
       chunksRef.current = [];
     };
 
-    recorder.start(1000);
+    // Request data every 100ms for better capture reliability
+    recorder.start(100);
     mediaRecorderRef.current = recorder;
     setIsRecording(true);
   }, [canvasRef, audioRef]);
 
   const stopRecording = useCallback(() => {
-    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
-      mediaRecorderRef.current.stop();
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
+      // Request any remaining data before stopping
+      try {
+        if (mediaRecorderRef.current.state === "recording") {
+          console.log(`🛑 [MediaRecorder] Requesting final data before stop...`);
+          mediaRecorderRef.current.requestData();
+        }
+      } catch (e) {
+        console.warn("⚠️ [MediaRecorder] requestData failed:", e);
+      }
+
+      // Give a small delay to ensure data is collected
+      setTimeout(() => {
+        if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
+          console.log(`🛑 [MediaRecorder] Stopping recorder...`);
+          mediaRecorderRef.current.stop();
+        }
+      }, 200);
     }
     setIsRecording(false);
   }, []);

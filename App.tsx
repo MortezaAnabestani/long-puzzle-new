@@ -118,6 +118,15 @@ const AppContent: React.FC = () => {
   const currentChapter = state.project?.chapters[state.currentChapterIndex] ?? null;
   const currentImageUrl = currentChapter?.imageUrl ?? null;
 
+  // ─── DEBUG: Track when image URL changes ───────────────────────────
+  useEffect(() => {
+    if (currentImageUrl) {
+      console.log(`📷 [App] Current image URL changed: ${currentImageUrl.substring(0, 80)}...`);
+    } else {
+      console.log(`📷 [App] Current image URL is NULL`);
+    }
+  }, [currentImageUrl]);
+
   // ─── PRELOAD NEXT CHAPTER ───────────────────────────────────────────
   const nextChapter = state.project?.chapters[state.currentChapterIndex + 1] ?? null;
   useEffect(() => {
@@ -177,47 +186,50 @@ const AppContent: React.FC = () => {
     // ✅ فقط یک بار trigger شود
     if (autoStartTriggeredRef.current) return;
 
+    // ✅ CRITICAL: Wait for BOTH project AND currentImageUrl to be ready!
+    // Without currentImageUrl, PuzzleCanvas won't mount and recording will fail!
     if (
       state.project &&
       state.project.status === ProjectStatus.READY_TO_PLAY &&
+      currentImageUrl && // ✅ NEW: Ensure image is loaded!
       !state.isSolving &&
       !state.isRecording
     ) {
       autoStartTriggeredRef.current = true; // ✅ Mark as triggered
-      console.log(`🎬 [App] Project ready - AUTO-STARTING recording and playback...`);
+      console.log(`🎬 [App] Project AND image ready - AUTO-STARTING recording and playback...`);
+      console.log(`   📷 Current image URL: ${currentImageUrl.substring(0, 60)}...`);
 
-      // ✅ Start after a small delay to ensure canvas is ready
-      setTimeout(() => {
-        setState((s) => {
-          if (!s.project) return s;
+      // ✅ NO DELAY! Start immediately!
+      // Canvas will be mounted very soon (within a few ms) and recording will capture from start
+      setState((s) => {
+        if (!s.project) return s;
 
-          // Start audio with fade
-          if (audioRef.current) {
-            audioRef.current.currentTime = 0;
-            playWithFade(audioRef.current, { duration: 2000, targetVolume: 1.0 });
-          }
+        // Start audio with fade
+        if (audioRef.current) {
+          audioRef.current.currentTime = 0;
+          playWithFade(audioRef.current, { duration: 2000, targetVolume: 1.0 });
+        }
 
-          console.log(`   🎥 Setting isRecording = true`);
-          console.log(`   ▶️ Setting isSolving = true`);
+        console.log(`   🎥 Setting isRecording = true (IMMEDIATELY, no delay)`);
+        console.log(`   ▶️ Setting isSolving = true`);
 
-          return {
-            ...s,
-            isSolving: true,
-            isRecording: true, // ✅ شروع ضبط از همان ابتدا
-            progress: 0,
-            pipelineStep: "RECORDING",
-            project: {
-              ...s.project,
-              status: ProjectStatus.PLAYING,
-              chapters: s.project.chapters.map((ch, i) =>
-                i === 0 ? { ...ch, status: ChapterStatus.PLAYING } : ch,
-              ),
-            },
-          };
-        });
-      }, 500); // ✅ 500ms delay to ensure canvas is ready
+        return {
+          ...s,
+          isSolving: true,
+          isRecording: true, // ✅ شروع ضبط بلافاصله!
+          progress: 0,
+          pipelineStep: "RECORDING",
+          project: {
+            ...s.project,
+            status: ProjectStatus.PLAYING,
+            chapters: s.project.chapters.map((ch, i) =>
+              i === 0 ? { ...ch, status: ChapterStatus.PLAYING } : ch,
+            ),
+          },
+        };
+      });
     }
-  }, [state.project?.status]); // ✅ فقط وقتی status تغییر کند
+  }, [state.project?.status, currentImageUrl, state.isSolving, state.isRecording]); // ✅ Added currentImageUrl dependency!
 
   // ─── ✅ TRANSITION COMPLETE (کلید اصلی!) ──────────────────────────
   const handleTransitionComplete = useCallback(() => {
